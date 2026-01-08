@@ -35,7 +35,7 @@ const LoginForm = ({ onSubmit, isLoading, error }: LoginFormProps) => {
             placeholder="your.email@fpt.edu.vn"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="pl-11 h-12 rounded-xl bg-card border-border focus:ring-2 focus:ring-primary/20"
+            className="pl-11 h-12 rounded-xl bg-muted/50 border-border focus:ring-2 focus:ring-primary/20"
             required
           />
         </div>
@@ -58,7 +58,7 @@ const LoginForm = ({ onSubmit, isLoading, error }: LoginFormProps) => {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="pl-11 pr-11 h-12 rounded-xl bg-card border-border focus:ring-2 focus:ring-primary/20"
+            className="pl-11 pr-11 h-12 rounded-xl bg-muted/50 border-border focus:ring-2 focus:ring-primary/20"
             required
             minLength={6}
           />
@@ -101,7 +101,7 @@ const LoginForm = ({ onSubmit, isLoading, error }: LoginFormProps) => {
           <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">New to F-Connect?</span>
+          <span className="bg-card px-2 text-muted-foreground">New to F-Connect?</span>
         </div>
       </div>
 
