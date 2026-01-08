@@ -50,124 +50,110 @@ const LandingPage = ({ onLoginSuccess }: LandingPageProps) => {
           <Heart className="absolute bottom-40 left-[20%] w-10 h-10 text-rose/15 floating-heart" style={{ animationDelay: '1s' }} />
         </div>
 
-        <div className="container mx-auto px-4 py-20">
-          <div className="max-w-4xl mx-auto text-center">
-            {/* Badge */}
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blush text-deep-rose text-sm font-medium mb-8">
-              <Sparkles className="w-4 h-4" />
-              Dành riêng cho sinh viên FPT
-            </span>
+        <div className="container mx-auto px-4 py-12">
+          <div className="max-w-5xl mx-auto">
+            {/* Header */}
+            <div className="text-center mb-10">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blush text-deep-rose text-sm font-medium mb-4">
+                <Sparkles className="w-4 h-4" />
+                Dành riêng cho sinh viên FPT
+              </span>
 
-            {/* Headline */}
-            <h1 className="font-serif text-4xl md:text-6xl font-bold text-foreground mb-6">
-              Tìm kiếm{" "}
-              <span className="text-gradient">tình yêu</span>
-              <br />
-              trong khuôn viên FPT
-            </h1>
+              <h1 className="font-serif text-3xl md:text-5xl font-bold text-foreground mb-4">
+                Tìm kiếm{" "}
+                <span className="text-gradient">tình yêu</span>
+                {" "}trong khuôn viên FPT
+              </h1>
 
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-              Kết nối với sinh viên FPT qua 2 tính năng độc đáo: Swipe Profiles để tìm match và Blind Date để chat ẩn danh.
-            </p>
-
-            {/* CTA */}
-            <Button 
-              size="lg" 
-              onClick={() => setShowLogin(true)}
-              className="gradient-primary text-primary-foreground h-14 px-8 rounded-2xl text-base font-semibold shadow-card hover:shadow-float transition-all group"
-            >
-              Bắt đầu ngay
-              <ArrowRight className="w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" />
-            </Button>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-8 mt-16 max-w-md mx-auto">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-gradient">5K+</p>
-                <p className="text-sm text-muted-foreground mt-1">Sinh viên</p>
-              </div>
-              <div className="text-center">
-                <p className="text-3xl font-bold text-gradient">1K+</p>
-                <p className="text-sm text-muted-foreground mt-1">Matches</p>
-              </div>
-              <div className="text-center">
-                <p className="text-3xl font-bold text-gradient">4</p>
-                <p className="text-sm text-muted-foreground mt-1">Campus</p>
-              </div>
+              <p className="text-base text-muted-foreground max-w-xl mx-auto">
+                Kết nối với sinh viên FPT qua 2 tính năng độc đáo
+              </p>
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section className="py-20 bg-card">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-serif text-3xl md:text-4xl font-bold text-foreground mb-4">
-              2 Tính năng chính
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Hai cách để kết nối với người đặc biệt tại FPT University
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Feature 1: Discovery */}
-            <div className="relative p-8 rounded-3xl bg-background shadow-card border border-border/50 overflow-hidden group hover:shadow-float transition-all">
-              <div className="absolute top-0 right-0 w-32 h-32 gradient-orange opacity-10 blur-3xl" />
-              
-              <div className="relative">
-                <div className="w-16 h-16 rounded-2xl gradient-orange flex items-center justify-center mb-6 shadow-soft">
-                  <Compass className="w-8 h-8 text-primary-foreground" />
+            {/* Feature Cards - ngay trong Hero */}
+            <div className="grid md:grid-cols-2 gap-6 mb-10">
+              {/* Feature 1: Discovery */}
+              <div className="relative p-6 rounded-2xl bg-card/80 backdrop-blur-sm shadow-card border border-border/50 overflow-hidden group hover:shadow-float transition-all">
+                <div className="absolute top-0 right-0 w-24 h-24 gradient-orange opacity-10 blur-2xl" />
+                
+                <div className="relative flex gap-4">
+                  <div className="w-14 h-14 rounded-xl gradient-orange flex items-center justify-center shadow-soft flex-shrink-0">
+                    <Compass className="w-7 h-7 text-primary-foreground" />
+                  </div>
+                  
+                  <div className="flex-1">
+                    <h3 className="font-serif text-xl font-bold text-foreground mb-2">
+                      Discovery Mode
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Swipe profiles sinh viên FPT. Like hoặc Pass. Match khi cả hai cùng thích!
+                    </p>
+                    
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                        Swipe Cards
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                        Instant Match
+                      </span>
+                    </div>
+                  </div>
                 </div>
+              </div>
+
+              {/* Feature 2: Blind Date */}
+              <div className="relative p-6 rounded-2xl bg-card/80 backdrop-blur-sm shadow-card border border-border/50 overflow-hidden group hover:shadow-float transition-all">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-accent opacity-10 blur-2xl" />
                 
-                <h3 className="font-serif text-2xl font-bold text-foreground mb-3">
-                  Discovery Mode
-                </h3>
-                <p className="text-muted-foreground mb-6">
-                  Swipe qua các profile sinh viên FPT. Vuốt phải để Like, vuốt trái để Pass. Match ngay khi cả hai cùng thích nhau!
-                </p>
-                
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                    Swipe Cards
-                  </span>
-                  <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                    Instant Match
-                  </span>
-                  <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                    FPT Students
-                  </span>
+                <div className="relative flex gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-accent flex items-center justify-center shadow-soft flex-shrink-0">
+                    <Shuffle className="w-7 h-7 text-accent-foreground" />
+                  </div>
+                  
+                  <div className="flex-1">
+                    <h3 className="font-serif text-xl font-bold text-foreground mb-2">
+                      Blind Date
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Chat ẩn danh với sinh viên FPT ngẫu nhiên. Reveal khi cả hai sẵn sàng!
+                    </p>
+                    
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="px-2.5 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+                        Anonymous
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+                        Safe Chat
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Feature 2: Blind Date */}
-            <div className="relative p-8 rounded-3xl bg-background shadow-card border border-border/50 overflow-hidden group hover:shadow-float transition-all">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-accent opacity-10 blur-3xl" />
-              
-              <div className="relative">
-                <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center mb-6 shadow-soft">
-                  <Shuffle className="w-8 h-8 text-accent-foreground" />
+            {/* CTA + Stats */}
+            <div className="text-center">
+              <Button 
+                size="lg" 
+                onClick={() => setShowLogin(true)}
+                className="gradient-primary text-primary-foreground h-12 px-8 rounded-xl text-base font-semibold shadow-card hover:shadow-float transition-all group mb-8"
+              >
+                Bắt đầu ngay
+                <ArrowRight className="w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" />
+              </Button>
+
+              <div className="flex justify-center gap-10">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gradient">5K+</p>
+                  <p className="text-xs text-muted-foreground">Sinh viên</p>
                 </div>
-                
-                <h3 className="font-serif text-2xl font-bold text-foreground mb-3">
-                  Blind Date
-                </h3>
-                <p className="text-muted-foreground mb-6">
-                  Chat ẩn danh với một sinh viên FPT ngẫu nhiên. Trò chuyện thoải mái trước, reveal danh tính khi cả hai sẵn sàng!
-                </p>
-                
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium">
-                    Anonymous
-                  </span>
-                  <span className="px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium">
-                    Safe Chat
-                  </span>
-                  <span className="px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium">
-                    Reveal Later
-                  </span>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gradient">1K+</p>
+                  <p className="text-xs text-muted-foreground">Matches</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gradient">4</p>
+                  <p className="text-xs text-muted-foreground">Campus</p>
                 </div>
               </div>
             </div>
