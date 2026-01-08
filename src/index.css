@@ -6,53 +6,57 @@
 
 @layer base {
   :root {
-    /* Dating App - Warm & Romantic Theme */
-    --background: 30 50% 98%;
-    --foreground: 350 30% 15%;
+    /* F-Connect - University Dating Theme */
+    --background: 40 100% 98%; /* #FFFBF5 soft cream */
+    --foreground: 20 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 350 30% 15%;
+    --card-foreground: 20 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 350 30% 15%;
+    --popover-foreground: 20 25% 15%;
 
-    --primary: 350 80% 60%;
+    /* FPT Orange as Primary */
+    --primary: 22 89% 55%; /* #F27125 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 30 40% 95%;
-    --secondary-foreground: 350 30% 25%;
+    --secondary: 40 60% 96%;
+    --secondary-foreground: 20 25% 25%;
 
-    --muted: 30 30% 94%;
-    --muted-foreground: 350 15% 45%;
+    --muted: 40 30% 94%;
+    --muted-foreground: 20 15% 45%;
 
-    --accent: 15 90% 65%;
+    /* Coral accent */
+    --accent: 350 75% 60%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 30% 88%;
-    --input: 30 30% 88%;
-    --ring: 350 80% 60%;
+    --border: 40 30% 88%;
+    --input: 40 30% 88%;
+    --ring: 22 89% 55%;
 
     --radius: 1rem;
 
-    /* Custom Dating App Tokens */
+    /* Custom F-Connect Tokens */
+    --fpt-orange: 22 89% 55%;
     --coral: 15 85% 62%;
     --rose: 350 75% 55%;
     --blush: 350 60% 92%;
-    --cream: 35 50% 97%;
+    --cream: 40 100% 98%;
     --deep-rose: 350 65% 40%;
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(15 85% 62%) 0%, hsl(350 75% 55%) 100%);
-    --gradient-soft: linear-gradient(180deg, hsl(30 50% 98%) 0%, hsl(350 60% 97%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(30 40% 98%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(22 89% 55%) 0%, hsl(350 75% 55%) 100%);
+    --gradient-orange: linear-gradient(135deg, hsl(22 89% 55%) 0%, hsl(15 85% 62%) 100%);
+    --gradient-soft: linear-gradient(180deg, hsl(40 100% 98%) 0%, hsl(350 60% 97%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(40 60% 98%) 100%);
     
     /* Shadows */
-    --shadow-soft: 0 4px 20px -4px hsl(350 50% 50% / 0.15);
-    --shadow-card: 0 8px 32px -8px hsl(350 50% 40% / 0.2);
-    --shadow-float: 0 20px 60px -15px hsl(350 50% 40% / 0.25);
+    --shadow-soft: 0 4px 20px -4px hsl(22 50% 50% / 0.15);
+    --shadow-card: 0 8px 32px -8px hsl(22 50% 40% / 0.2);
+    --shadow-float: 0 20px 60px -15px hsl(22 50% 40% / 0.25);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -61,52 +65,53 @@
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 22 89% 55%;
   }
 
   .dark {
-    --background: 350 25% 8%;
-    --foreground: 30 30% 95%;
+    --background: 20 20% 8%;
+    --foreground: 40 30% 95%;
 
-    --card: 350 20% 12%;
-    --card-foreground: 30 30% 95%;
+    --card: 20 15% 12%;
+    --card-foreground: 40 30% 95%;
 
-    --popover: 350 20% 12%;
-    --popover-foreground: 30 30% 95%;
+    --popover: 20 15% 12%;
+    --popover-foreground: 40 30% 95%;
 
-    --primary: 350 75% 60%;
+    --primary: 22 85% 55%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 350 15% 18%;
-    --secondary-foreground: 30 30% 90%;
+    --secondary: 20 15% 18%;
+    --secondary-foreground: 40 30% 90%;
 
-    --muted: 350 15% 20%;
-    --muted-foreground: 30 20% 60%;
+    --muted: 20 15% 20%;
+    --muted-foreground: 40 20% 60%;
 
-    --accent: 15 80% 55%;
+    --accent: 350 70% 55%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 350 15% 22%;
-    --input: 350 15% 22%;
-    --ring: 350 75% 60%;
+    --border: 20 15% 22%;
+    --input: 20 15% 22%;
+    --ring: 22 85% 55%;
 
+    --fpt-orange: 22 80% 50%;
     --coral: 15 75% 55%;
     --rose: 350 70% 50%;
     --blush: 350 30% 20%;
-    --cream: 350 20% 12%;
+    --cream: 20 15% 12%;
     --deep-rose: 350 60% 35%;
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary: 22 85% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 22 85% 55%;
   }
 }
 
@@ -128,6 +133,10 @@
 @layer utilities {
   .gradient-primary {
     background: var(--gradient-primary);
+  }
+
+  .gradient-orange {
+    background: var(--gradient-orange);
   }
 
   .gradient-soft {
@@ -178,10 +187,10 @@
 
   @keyframes pulse-glow {
     0%, 100% {
-      box-shadow: 0 0 20px hsl(350 75% 55% / 0.3);
+      box-shadow: 0 0 20px hsl(22 89% 55% / 0.3);
     }
     50% {
-      box-shadow: 0 0 40px hsl(350 75% 55% / 0.5);
+      box-shadow: 0 0 40px hsl(22 89% 55% / 0.5);
     }
   }
 
@@ -217,5 +226,52 @@
   .animate-slide-up-delay-3 {
     animation: slide-up 0.6s ease-out 0.3s forwards;
     opacity: 0;
+  }
+
+  /* Radar Animation for Blind Date */
+  @keyframes radar-scan {
+    0% {
+      transform: scale(0.5);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  .radar-pulse {
+    animation: radar-scan 1.5s ease-out infinite;
+  }
+
+  .radar-pulse-delay-1 {
+    animation: radar-scan 1.5s ease-out 0.5s infinite;
+  }
+
+  .radar-pulse-delay-2 {
+    animation: radar-scan 1.5s ease-out 1s infinite;
+  }
+
+  /* Swipe animations */
+  @keyframes swipe-right {
+    to {
+      transform: translateX(150%) rotate(20deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes swipe-left {
+    to {
+      transform: translateX(-150%) rotate(-20deg);
+      opacity: 0;
+    }
+  }
+
+  .swipe-right {
+    animation: swipe-right 0.4s ease-out forwards;
+  }
+
+  .swipe-left {
+    animation: swipe-left 0.4s ease-out forwards;
   }
 }
