@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import LoginPage from '@/features/auth/pages/LoginPage';
+import LandingPage from './LandingPage';
 import DiscoveryPage from '@/features/dating/pages/DiscoveryPage';
 import BlindDatePage from '@/features/blind-date/pages/BlindDatePage';
 import MessagesPage from '@/features/messages/pages/MessagesPage';
@@ -30,7 +30,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return <LoginPage onLoginSuccess={setUser} />;
+    return <LandingPage onLoginSuccess={setUser} />;
   }
 
   const renderContent = () => {
