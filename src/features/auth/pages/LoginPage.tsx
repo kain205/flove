@@ -43,7 +43,7 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
       <main className="flex-1 flex items-center justify-center px-6 pb-12">
         <div className="w-full max-w-md">
           {/* Welcome Text */}
-          <div className="text-center mb-8 animate-slide-up">
+          <div className="text-center mb-8">
             <h1 className="font-serif text-3xl font-bold text-foreground mb-2">
               Welcome Back
             </h1>
@@ -53,7 +53,7 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
           </div>
 
           {/* Login Card */}
-          <div className="bg-card rounded-3xl p-8 shadow-card animate-slide-up-delay-1">
+          <div className="bg-card rounded-3xl p-8 shadow-float border border-border/50">
             <LoginForm
               onSubmit={handleLogin}
               isLoading={isLoading}
@@ -62,7 +62,7 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
           </div>
 
           {/* Footer Text */}
-          <p className="text-center text-xs text-muted-foreground mt-6 animate-slide-up-delay-2">
+          <p className="text-center text-xs text-muted-foreground mt-6">
             By signing in, you agree to our Terms of Service and Privacy Policy
           </p>
         </div>
