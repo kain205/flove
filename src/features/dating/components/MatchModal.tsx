@@ -1,4 +1,5 @@
 import { Heart, Sparkles, MessageCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Match } from '@/types';
 import {
@@ -16,6 +17,7 @@ interface MatchModalProps {
 }
 
 const MatchModal = ({ isOpen, onClose, match, onSendMessage }: MatchModalProps) => {
+  const { t } = useTranslation('dating');
   if (!match) return null;
 
   return (
@@ -31,7 +33,7 @@ const MatchModal = ({ isOpen, onClose, match, onSendMessage }: MatchModalProps) 
           {/* Content */}
           <div className="relative p-8 text-center">
             <DialogHeader>
-              <DialogTitle className="sr-only">It's a Match!</DialogTitle>
+              <DialogTitle className="sr-only">{t('matchModal.title')}</DialogTitle>
             </DialogHeader>
 
             {/* Hearts Animation */}
@@ -44,10 +46,10 @@ const MatchModal = ({ isOpen, onClose, match, onSendMessage }: MatchModalProps) 
 
             {/* Title */}
             <h2 className="font-serif text-3xl font-bold text-foreground mb-2">
-              It's a Match!
+              {t('matchModal.title')}
             </h2>
             <p className="text-muted-foreground mb-6">
-              You and {match.matchedUser.name} liked each other
+              {t('matchModal.description', { name: match.matchedUser.name })}
             </p>
 
             {/* Profile Picture */}
@@ -77,14 +79,14 @@ const MatchModal = ({ isOpen, onClose, match, onSendMessage }: MatchModalProps) 
                 onClick={onClose}
                 className="flex-1 h-12 rounded-xl border-2"
               >
-                Keep Swiping
+                {t('matchModal.keepSwiping')}
               </Button>
               <Button
                 onClick={onSendMessage}
                 className="flex-1 h-12 rounded-xl gradient-primary text-primary-foreground"
               >
                 <MessageCircle className="w-5 h-5 mr-2" />
-                Send Message
+                {t('matchModal.sendMessage')}
               </Button>
             </div>
           </div>

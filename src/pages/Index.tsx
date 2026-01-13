@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import LandingPage from './LandingPage';
+import LoginPage from '@/features/auth/pages/LoginPage';
 import DiscoveryPage from '@/features/dating/pages/DiscoveryPage';
 import BlindDatePage from '@/features/blind-date/pages/BlindDatePage';
 import MessagesPage from '@/features/messages/pages/MessagesPage';
@@ -30,6 +32,11 @@ const Index = () => {
   }
 
   if (!user) {
+    // Mobile users go directly to login, web users see landing page
+    const isMobile = Capacitor.isNativePlatform();
+    if (isMobile) {
+      return <LoginPage onLoginSuccess={setUser} />;
+    }
     return <LandingPage onLoginSuccess={setUser} />;
   }
 

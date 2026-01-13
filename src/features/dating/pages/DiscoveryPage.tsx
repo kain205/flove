@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Sparkles, Heart } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import SwipeCard from '../components/SwipeCard';
 import MatchModal from '../components/MatchModal';
@@ -11,11 +13,10 @@ interface DiscoveryPageProps {
 }
 
 const DiscoveryPage = ({ onNavigateToMessages }: DiscoveryPageProps) => {
+  const { t } = useTranslation('dating');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [animationDirection, setAnimationDirection] = useState<'left' | 'right' | null>(null);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
 
@@ -39,13 +40,7 @@ const DiscoveryPage = ({ onNavigateToMessages }: DiscoveryPageProps) => {
   const currentProfile = profiles[currentIndex];
 
   const handleSwipe = async (direction: 'left' | 'right') => {
-    if (!currentProfile || isAnimating) return;
-
-    setIsAnimating(true);
-    setAnimationDirection(direction);
-
-    // Wait for animation
-    await new Promise(resolve => setTimeout(resolve, 400));
+    if (!currentProfile) return;
 
     if (direction === 'right') {
       const result = await matchService.swipeRight(currentProfile.id);
@@ -57,8 +52,6 @@ const DiscoveryPage = ({ onNavigateToMessages }: DiscoveryPageProps) => {
       await matchService.swipeLeft(currentProfile.id);
     }
 
-    setIsAnimating(false);
-    setAnimationDirection(null);
     setCurrentIndex(prev => prev + 1);
   };
 
@@ -72,64 +65,77 @@ const DiscoveryPage = ({ onNavigateToMessages }: DiscoveryPageProps) => {
     onNavigateToMessages();
   };
 
-  // No more profiles
+  // No more profiles - Enhanced empty state
   if (!isLoading && currentIndex >= profiles.length) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-        <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mb-6">
-          <RefreshCw className="w-12 h-12 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute inset-0 bg-aurora opacity-50 pointer-events-none" />
+        
+        <div className="relative z-10 animate-slide-up">
+          <div className="w-28 h-28 rounded-3xl bg-muted/50 glass-card flex items-center justify-center mb-8 mx-auto shadow-card">
+            <Heart className="w-14 h-14 text-muted-foreground/50" />
+          </div>
+          <h2 className="font-serif text-3xl font-bold text-foreground mb-3">
+            {t('discovery.noMoreProfiles.title')}
+          </h2>
+          <p className="text-muted-foreground mb-8 max-w-sm leading-relaxed">
+            {t('discovery.noMoreProfiles.description')}
+          </p>
+          <Button
+            onClick={handleRefresh}
+            className="gradient-primary text-primary-foreground rounded-2xl px-10 h-14 text-base font-semibold shadow-card hover:shadow-float transition-all duration-300 btn-shine cursor-pointer"
+          >
+            <RefreshCw className="w-5 h-5 mr-3" />
+            {t('discovery.noMoreProfiles.refreshButton')}
+          </Button>
         </div>
-        <h2 className="font-serif text-2xl font-bold text-foreground mb-2">
-          No More Profiles
-        </h2>
-        <p className="text-muted-foreground mb-6 max-w-xs">
-          You've seen everyone nearby! Check back later for new students.
-        </p>
-        <Button
-          onClick={handleRefresh}
-          className="gradient-primary text-primary-foreground rounded-xl px-8 h-12"
-        >
-          <RefreshCw className="w-5 h-5 mr-2" />
-          Refresh Profiles
-        </Button>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-4 text-center">
-        <h1 className="font-serif text-2xl font-bold text-foreground">Discover</h1>
-        <p className="text-sm text-muted-foreground">
-          {profiles.length - currentIndex} profiles left
+    <div className="h-full flex flex-col relative">
+      {/* Header - Enhanced */}
+      <div className="p-5 text-center relative z-10">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 mb-2">
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span className="text-xs font-semibold text-primary">Discovery Mode</span>
+        </div>
+        <h1 className="font-serif text-2xl font-bold text-foreground">{t('discovery.title')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {t('discovery.profilesLeft', { count: profiles.length - currentIndex })}
         </p>
       </div>
 
       {/* Cards Stack */}
-      <div className="flex-1 relative px-4 pb-32">
+      <div className="flex-1 relative px-4 pb-36">
         {isLoading ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+            <div className="w-14 h-14 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground animate-pulse">Đang tải...</p>
           </div>
         ) : currentProfile ? (
           <div className="relative h-full flex items-start justify-center pt-4">
-            {/* Background cards for stack effect */}
+            {/* Background cards for stack effect - Enhanced */}
             {profiles[currentIndex + 2] && (
-              <div className="absolute top-8 left-1/2 -translate-x-1/2 w-[calc(100%-4rem)] max-w-[calc(24rem-2rem)] h-[480px] rounded-3xl bg-card shadow-soft opacity-30 scale-90" />
+              <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[calc(100%-5rem)] max-w-[calc(24rem-2.5rem)] h-[500px] rounded-3xl bg-card/50 shadow-soft opacity-30 scale-[0.88] blur-[1px]" />
             )}
             {profiles[currentIndex + 1] && (
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[calc(24rem-1rem)] h-[490px] rounded-3xl bg-card shadow-card opacity-50 scale-95" />
+              <div className="absolute top-7 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-[calc(24rem-1.5rem)] h-[510px] rounded-3xl bg-card/70 shadow-card opacity-50 scale-95" />
             )}
             
             {/* Current Card */}
-            <SwipeCard
-              profile={currentProfile}
-              onSwipeLeft={() => handleSwipe('left')}
-              onSwipeRight={() => handleSwipe('right')}
-              isAnimating={isAnimating}
-              animationDirection={animationDirection}
-            />
+            <AnimatePresence mode="popLayout">
+              {currentProfile && (
+                <SwipeCard
+                  key={currentProfile.id}
+                  profile={currentProfile}
+                  onSwipeLeft={() => handleSwipe('left')}
+                  onSwipeRight={() => handleSwipe('right')}
+                />
+              )}
+            </AnimatePresence>
           </div>
         ) : null}
       </div>

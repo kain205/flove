@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import ConversationList from '../components/ConversationList';
 import { chatService } from '@/services/chatService';
 import { Conversation } from '@/types';
 
 const MessagesPage = () => {
+  const { t } = useTranslation('messages');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,13 +40,13 @@ const MessagesPage = () => {
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="p-4 border-b border-border bg-card">
-        <h1 className="font-serif text-2xl font-bold text-foreground mb-4">Messages</h1>
+        <h1 className="font-serif text-2xl font-bold text-foreground mb-4">{t('messages.title')}</h1>
         
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <Input
-            placeholder="Search conversations..."
+            placeholder={t('messages.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 h-11 rounded-xl bg-muted border-transparent"
@@ -55,13 +57,13 @@ const MessagesPage = () => {
       {/* Tabs */}
       <div className="flex border-b border-border">
         <button className="flex-1 py-3 text-sm font-medium text-primary border-b-2 border-primary">
-          All
+          {t('messages.tabs.all')}
         </button>
         <button className="flex-1 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-          Matches
+          {t('messages.tabs.matches')}
         </button>
         <button className="flex-1 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-          Anonymous
+          {t('messages.tabs.anonymous')}
         </button>
       </div>
 

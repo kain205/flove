@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Eye, ArrowLeft, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BlindDateSession, Message } from '@/types';
@@ -12,11 +13,12 @@ interface AnonymousChatProps {
 }
 
 const AnonymousChat = ({ session, onBack, onRevealAccepted }: AnonymousChatProps) => {
+  const { t } = useTranslation('blindDate');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       senderId: session.partnerId,
-      content: "Hey there! Nice to match with you 👋",
+      content: t('anonymousChat.initialMessage'),
       timestamp: new Date(),
       isRead: true,
     },
@@ -106,7 +108,7 @@ const AnonymousChat = ({ session, onBack, onRevealAccepted }: AnonymousChatProps
           </div>
           <div>
             <h2 className="font-semibold text-foreground">{session.partnerMaskedName}</h2>
-            <p className="text-xs text-muted-foreground">Anonymous Match</p>
+            <p className="text-xs text-muted-foreground">{t('anonymousChat.anonymousMatch')}</p>
           </div>
         </div>
 
@@ -119,9 +121,9 @@ const AnonymousChat = ({ session, onBack, onRevealAccepted }: AnonymousChatProps
             className="rounded-xl"
           >
             <Eye className="w-4 h-4 mr-1" />
-            {revealResult === 'pending' ? 'Requesting...' : 
-             revealResult === 'accepted' ? 'Accepted!' :
-             revealResult === 'rejected' ? 'Declined' : 'Request Reveal'}
+            {revealResult === 'pending' ? t('anonymousChat.requesting') : 
+             revealResult === 'accepted' ? t('anonymousChat.accepted') :
+             revealResult === 'rejected' ? t('anonymousChat.declined') : t('anonymousChat.revealRequest')}
           </Button>
         )}
       </div>
@@ -134,9 +136,9 @@ const AnonymousChat = ({ session, onBack, onRevealAccepted }: AnonymousChatProps
           ${revealResult === 'rejected' ? 'bg-destructive/10 text-destructive' : ''}
           ${revealResult === 'pending' ? 'bg-muted text-muted-foreground' : ''}
         `}>
-          {revealResult === 'accepted' && "🎉 Your partner accepted! Revealing identities..."}
-          {revealResult === 'rejected' && "Your partner isn't ready to reveal yet. Keep chatting!"}
-          {revealResult === 'pending' && "Waiting for your partner's response..."}
+          {revealResult === 'accepted' && t('anonymousChat.revealToasts.accepted')}
+          {revealResult === 'rejected' && t('anonymousChat.revealToasts.rejected')}
+          {revealResult === 'pending' && t('anonymousChat.revealToasts.pending')}
         </div>
       )}
 
@@ -177,7 +179,7 @@ const AnonymousChat = ({ session, onBack, onRevealAccepted }: AnonymousChatProps
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type a message..."
+            placeholder={t('anonymousChat.messagePlaceholder')}
             className="flex-1 h-12 rounded-xl"
           />
           <Button
