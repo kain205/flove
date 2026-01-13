@@ -1,0 +1,24 @@
+{
+  "discovery": {
+    "title": "Discover",
+    "profilesLeft": "{{count}} profile left",
+    "profilesLeft_plural": "{{count}} profiles left",
+    "noMoreProfiles": {
+      "title": "No More Profiles",
+      "description": "You've seen everyone nearby! Check back later for new students.",
+      "refreshButton": "Refresh Profiles"
+    }
+  },
+  "swipeCard": {
+    "away": "{{distance}} away",
+    "campus": "FPT {{campus}}",
+    "like": "LIKE",
+    "nope": "NOPE"
+  },
+  "matchModal": {
+    "title": "It's a Match!",
+    "description": "You and {{name}} liked each other",
+    "keepSwiping": "Keep Swiping",
+    "sendMessage": "Send Message"
+  }
+}

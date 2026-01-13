@@ -1,0 +1,30 @@
+{
+  "app": {
+    "name": "F-Connect"
+  },
+  "navigation": {
+    "discover": "Discover",
+    "blindDate": "Blind Date",
+    "messages": "Messages",
+    "profile": "Profile"
+  },
+  "actions": {
+    "back": "Back",
+    "refresh": "Refresh",
+    "send": "Send",
+    "close": "Close",
+    "continue": "Continue"
+  },
+  "status": {
+    "loading": "Loading...",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "majors": {
+    "SE": "Software Engineering",
+    "AI": "Artificial Intelligence",
+    "Biz": "Business Administration",
+    "Design": "Graphic Design",
+    "Marketing": "Digital Marketing"
+  }
+}

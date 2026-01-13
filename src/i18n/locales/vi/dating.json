@@ -1,0 +1,24 @@
+{
+  "discovery": {
+    "title": "Khám Phá",
+    "profilesLeft": "Còn {{count}} hồ sơ",
+    "profilesLeft_plural": "Còn {{count}} hồ sơ",
+    "noMoreProfiles": {
+      "title": "Hết Hồ Sơ",
+      "description": "Bạn đã xem hết mọi người gần đây! Quay lại sau để xem sinh viên mới.",
+      "refreshButton": "Làm Mới"
+    }
+  },
+  "swipeCard": {
+    "away": "Cách {{distance}}",
+    "campus": "FPT {{campus}}",
+    "like": "THÍCH",
+    "nope": "BỎ QUA"
+  },
+  "matchModal": {
+    "title": "Ghép Đôi Thành Công!",
+    "description": "Bạn và {{name}} đã thích nhau",
+    "keepSwiping": "Tiếp Tục Vuốt",
+    "sendMessage": "Gửi Tin Nhắn"
+  }
+}

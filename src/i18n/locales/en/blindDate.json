@@ -1,0 +1,34 @@
+{
+  "blindDate": {
+    "badge": "Mystery Awaits",
+    "title": "Blind Date",
+    "subtitle": "Connect anonymously with another FPT student. Chat first, reveal later!",
+    "searching": "Finding your anonymous match...",
+    "findPartner": "Find Anonymous Partner",
+    "infoCards": {
+      "anonymous": "Stay anonymous until you're ready",
+      "chatFreely": "Chat freely, reveal when comfortable"
+    }
+  },
+  "anonymousChat": {
+    "anonymousMatch": "Anonymous Match",
+    "revealRequest": "Request Reveal",
+    "requesting": "Requesting...",
+    "accepted": "Accepted!",
+    "declined": "Declined",
+    "messagePlaceholder": "Type a message...",
+    "revealToasts": {
+      "accepted": "🎉 Your partner accepted! Revealing identities...",
+      "rejected": "Your partner isn't ready to reveal yet. Keep chatting!",
+      "pending": "Waiting for your partner's response..."
+    },
+    "initialMessage": "Hey there! Nice to match with you 👋",
+    "responses": [
+      "That's interesting! Tell me more 😊",
+      "Haha, I totally agree!",
+      "What do you study at FPT?",
+      "This blind date thing is so exciting!",
+      "I wonder what you look like 🤔"
+    ]
+  }
+}

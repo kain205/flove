@@ -1,0 +1,30 @@
+{
+  "app": {
+    "name": "F-Connect"
+  },
+  "navigation": {
+    "discover": "Khám Phá",
+    "blindDate": "Hẹn Hò Bí Mật",
+    "messages": "Tin Nhắn",
+    "profile": "Hồ Sơ"
+  },
+  "actions": {
+    "back": "Quay Lại",
+    "refresh": "Làm Mới",
+    "send": "Gửi",
+    "close": "Đóng",
+    "continue": "Tiếp Tục"
+  },
+  "status": {
+    "loading": "Đang tải...",
+    "online": "Trực Tuyến",
+    "offline": "Ngoại Tuyến"
+  },
+  "majors": {
+    "SE": "Kỹ Thuật Phần Mềm",
+    "AI": "Trí Tuệ Nhân Tạo",
+    "Biz": "Quản Trị Kinh Doanh",
+    "Design": "Thiết Kế Đồ Họa",
+    "Marketing": "Marketing Số"
+  }
+}
