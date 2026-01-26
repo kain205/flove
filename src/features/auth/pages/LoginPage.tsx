@@ -48,7 +48,7 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
           <div className="w-11 h-11 rounded-xl gradient-primary flex items-center justify-center shadow-card group-hover:shadow-glow transition-shadow duration-300">
             <Heart className="w-5 h-5 text-primary-foreground fill-primary-foreground" />
           </div>
-          <span className="font-serif text-xl font-bold text-foreground">F-Connect</span>
+          <span className="font-serif text-xl font-bold text-foreground">F-Love</span>
         </div>
       </header>
 

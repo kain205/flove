@@ -7,7 +7,7 @@
 
 @layer base {
   :root {
-    /* F-Connect - University Dating Theme */
+    /* F-Love - University Dating Theme */
     --background: 40 100% 98%; /* #FFFBF5 soft cream */
     --foreground: 20 25% 15%;
 
@@ -40,7 +40,7 @@
 
     --radius: 1rem;
 
-    /* Custom F-Connect Tokens */
+    /* Custom F-Love Tokens */
     --fpt-orange: 22 89% 55%;
     --coral: 15 85% 62%;
     --rose: 350 75% 55%;

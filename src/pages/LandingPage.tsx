@@ -25,7 +25,7 @@ const LandingPage = ({ onLoginSuccess }: LandingPageProps) => {
               <div className="w-11 h-11 rounded-xl gradient-primary flex items-center justify-center shadow-soft group-hover:shadow-glow transition-shadow duration-300">
                 <Heart className="w-5 h-5 text-primary-foreground fill-primary-foreground" />
               </div>
-              <span className="font-serif text-xl font-bold text-foreground">F-Connect</span>
+              <span className="font-serif text-xl font-bold text-foreground">F-Love</span>
             </a>
 
             <div className="flex items-center gap-3">
@@ -329,10 +329,10 @@ const LandingPage = ({ onLoginSuccess }: LandingPageProps) => {
               <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft group-hover:shadow-glow transition-shadow duration-300">
                 <Heart className="w-5 h-5 text-primary-foreground fill-primary-foreground" />
               </div>
-              <span className="font-serif text-lg font-bold text-foreground">F-Connect</span>
+              <span className="font-serif text-lg font-bold text-foreground">F-Love</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2026 F-Connect. Made with <Heart className="w-4 h-4 inline text-accent fill-accent" /> for FPT Students.
+              © 2026 F-Love. Made with <Heart className="w-4 h-4 inline text-accent fill-accent" /> for FPT Students.
             </p>
           </div>
         </div>

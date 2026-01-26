@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 
-export const LANGUAGE_KEY = 'f-connect-language';
+export const LANGUAGE_KEY = 'f-love-language';
 export const AVAILABLE_LANGUAGES = ['en', 'vi'] as const;
 export type Language = typeof AVAILABLE_LANGUAGES[number];
 

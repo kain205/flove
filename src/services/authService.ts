@@ -45,15 +45,15 @@ export const authService = {
 
   async getCurrentUser(): Promise<User | null> {
     await delay(500);
-    const stored = localStorage.getItem('f-connect-user');
+    const stored = localStorage.getItem('f-love-user');
     return stored ? JSON.parse(stored) : null;
   },
 
   saveUser(user: User): void {
-    localStorage.setItem('f-connect-user', JSON.stringify(user));
+    localStorage.setItem('f-love-user', JSON.stringify(user));
   },
 
   clearUser(): void {
-    localStorage.removeItem('f-connect-user');
+    localStorage.removeItem('f-love-user');
   },
 };

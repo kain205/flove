@@ -26,7 +26,7 @@ const MainLayout = ({ children, activeTab, onTabChange }: MainLayoutProps) => {
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft hover:shadow-glow transition-shadow duration-300 cursor-pointer">
             <Heart className="w-5 h-5 text-primary-foreground fill-primary-foreground" />
           </div>
-          <span className="font-serif text-lg font-bold text-foreground">F-Connect</span>
+          <span className="font-serif text-lg font-bold text-foreground">F-Love</span>
         </div>
         <LanguageSwitcher />
       </header>

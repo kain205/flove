@@ -1,4 +1,4 @@
-# 💕 F-Connect
+# 💕 F-Love
 
 > Ứng dụng hẹn hò dành riêng cho sinh viên FPT
 
@@ -9,7 +9,7 @@
 
 ## 📖 Giới thiệu
 
-**F-Connect** là ứng dụng hẹn hò được thiết kế đặc biệt cho cộng đồng sinh viên FPT. Ứng dụng cung cấp 2 tính năng chính:
+**F-Love** là ứng dụng hẹn hò được thiết kế đặc biệt cho cộng đồng sinh viên FPT. Ứng dụng cung cấp 2 tính năng chính:
 
 - 🧭 **Discovery Mode**: Swipe profiles sinh viên FPT, like hoặc pass, match khi cả hai cùng thích
 - 🎭 **Blind Date**: Chat ẩn danh với sinh viên ngẫu nhiên, reveal khi cả hai sẵn sàng
@@ -39,7 +39,7 @@
 ## 📁 Cấu trúc thư mục
 
 ```
-F-connect/
+F-Love/
 ├── src/
 │   ├── components/      # Components dùng chung (UI, Navbar, etc.)
 │   ├── features/        # Các tính năng chính
@@ -72,8 +72,8 @@ F-connect/
 ### Bước 1: Clone repository
 
 ```bash
-git clone https://github.com/your-username/F-connect.git
-cd F-connect
+git clone https://github.com/your-username/F-Love.git
+cd F-Love
 ```
 
 ### Bước 2: Cài đặt dependencies
@@ -98,7 +98,7 @@ Truy cập địa chỉ hiển thị trong terminal (thường là):
 http://localhost:8080
 ```
 
-🎉 **Xong!** Bạn đã có thể trải nghiệm F-Connect trên web.
+🎉 **Xong!** Bạn đã có thể trải nghiệm F-Love trên web.
 
 ---
 
@@ -154,8 +154,8 @@ Nhấn nút **Fork** ở góc trên bên phải của trang GitHub.
 #### 2. Clone fork về máy
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/F-connect.git
-cd F-connect
+git clone https://github.com/YOUR_USERNAME/F-Love.git
+cd F-Love
 ```
 
 #### 3. Tạo branch mới
@@ -292,9 +292,9 @@ Dự án này được phát hành dưới giấy phép [MIT License](LICENSE).
 
 ## 💬 Liên hệ
 
-- 📧 Email: support@f-connect.vn
-- 🌐 Website: [f-connect.vn](https://f-connect.vn)
-- 📱 Facebook: [F-Connect](https://facebook.com/fconnect)
+- 📧 Email: support@f-love.vn
+- 🌐 Website: [f-love.vn](https://f-love.vn)
+- 📱 Facebook: [F-Love](https://facebook.com/flove)
 
 ---
 
