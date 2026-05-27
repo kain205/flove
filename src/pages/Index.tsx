@@ -2,26 +2,50 @@ import { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import LandingPage from './LandingPage';
 import LoginPage from '@/features/auth/pages/LoginPage';
-import DiscoveryPage from '@/features/dating/pages/DiscoveryPage';
+import BioPromptPage from '@/features/auth/pages/BioPromptPage';
+import AiPicksPage from '@/features/ai-picks/pages/AiPicksPage';
 import BlindDatePage from '@/features/blind-date/pages/BlindDatePage';
 import MessagesPage from '@/features/messages/pages/MessagesPage';
 import MainLayout from '@/shared/layouts/MainLayout';
+import ProfilePage from '@/features/profile/pages/ProfilePage';
 import { User } from '@/types';
 import { authService } from '@/services/authService';
 
 const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'discovery' | 'blind-date' | 'messages' | 'profile'>('discovery');
+  const [activeTab, setActiveTab] = useState<'ai-picks' | 'blind-date' | 'messages' | 'profile'>('ai-picks');
+
+  const [showBioPrompt, setShowBioPrompt] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const savedUser = await authService.getCurrentUser();
-      if (savedUser) setUser(savedUser);
+    // Load cached user instantly — no spinner on return visits
+    const cached = localStorage.getItem('flove-user');
+    if (cached) {
+      const u = JSON.parse(cached) as User;
+      setUser(u);
       setIsLoading(false);
-    };
-    checkAuth();
+    }
+
+    // Then sync from Firebase in background
+    const unsubscribe = authService.onAuthChanged((u) => {
+      if (u) {
+        localStorage.setItem('flove-user', JSON.stringify(u));
+        setUser(u);
+      } else {
+        localStorage.removeItem('flove-user');
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
+
+  // Show bio prompt whenever user changes and bio is empty
+  useEffect(() => {
+    if (user && user.bio === '') setShowBioPrompt(true);
+  }, [user]);
 
   if (isLoading) {
     return (
@@ -32,7 +56,6 @@ const Index = () => {
   }
 
   if (!user) {
-    // Mobile users go directly to login, web users see landing page
     const isMobile = Capacitor.isNativePlatform();
     if (isMobile) {
       return <LoginPage onLoginSuccess={setUser} />;
@@ -42,34 +65,39 @@ const Index = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'discovery':
-        return <DiscoveryPage onNavigateToMessages={() => setActiveTab('messages')} />;
+      case 'ai-picks':
+        return <AiPicksPage onNavigateToMessages={() => setActiveTab('messages')} />;
       case 'blind-date':
         return <BlindDatePage />;
       case 'messages':
         return <MessagesPage />;
       case 'profile':
-        return (
-          <div className="p-6 text-center">
-            <h2 className="font-serif text-2xl font-bold mb-4">Profile</h2>
-            <p className="text-muted-foreground mb-4">Welcome, {user.name}!</p>
-            <button
-              onClick={() => { authService.clearUser(); setUser(null); }}
-              className="text-destructive underline"
-            >
-              Logout
-            </button>
-          </div>
-        );
+        return <ProfilePage user={user} onUserUpdate={setUser} />;
       default:
         return null;
     }
   };
 
   return (
-    <MainLayout activeTab={activeTab} onTabChange={setActiveTab}>
-      {renderContent()}
-    </MainLayout>
+    <>
+      <MainLayout activeTab={activeTab} onTabChange={setActiveTab}>
+        {renderContent()}
+      </MainLayout>
+
+      {showBioPrompt && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-slide-up">
+            <BioPromptPage
+              user={user}
+              onComplete={(bio) => {
+                setUser({ ...user, bio });
+                setShowBioPrompt(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

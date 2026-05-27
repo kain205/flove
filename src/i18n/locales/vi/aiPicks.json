@@ -1,0 +1,59 @@
+{
+  "loading": "Đang chọn match hôm nay...",
+  "header": {
+    "badge": "AI chọn mỗi ngày",
+    "title": "AI Picks Hôm Nay",
+    "subtitle": "Mỗi ngày bạn nhận 3-5 đề xuất có chọn lọc.",
+    "subtitleWithDate": "{{count}} đề xuất cho {{date}}",
+    "refine": "Tinh chỉnh"
+  },
+  "summary": {
+    "pending": "Còn {{count}} đề xuất cần phản hồi",
+    "pending_plural": "Còn {{count}} đề xuất cần phản hồi",
+    "done": "Bạn đã xem xong đề xuất hôm nay. Match mới sẽ có vào ngày mai.",
+    "openMessages": "Mở Tin Nhắn"
+  },
+  "empty": {
+    "title": "Chưa có đề xuất",
+    "description": "AI cần thêm ngữ cảnh từ hồ sơ hoặc sở thích của bạn trước khi chọn match tốt.",
+    "refine": "Tinh chỉnh gu"
+  },
+  "status": {
+    "pending": "Cần phản hồi",
+    "accepted": "Đang chờ người kia",
+    "declined": "Đã từ chối",
+    "skipped": "Đã bỏ qua",
+    "reported": "Đã báo cáo",
+    "matched": "Đã match"
+  },
+  "card": {
+    "reasonTitle": "Vì sao AI chọn người này",
+    "feedbackPrompt": "Giúp AI học gu của bạn",
+    "notePlaceholder": "Ghi chú thêm cho lần đề xuất sau...",
+    "skip": "Bỏ qua",
+    "decline": "Từ chối",
+    "accept": "Đồng ý",
+    "report": "Báo cáo hồ sơ này"
+  },
+  "tags": {
+    "vibe": "Không hợp vibe",
+    "campus": "Khác campus",
+    "interests": "Ít sở thích chung",
+    "type": "Không phải gu",
+    "pace": "Khác nhịp hẹn hò"
+  },
+  "notice": {
+    "waiting": "Đã lưu. Nếu người kia cũng đồng ý, cuộc trò chuyện sẽ mở trong Tin Nhắn.",
+    "mutual": "Cả hai đã đồng ý. Cuộc trò chuyện đã sẵn sàng trong Tin Nhắn.",
+    "declined": "Đã lưu phản hồi. AI sẽ tránh các đề xuất tương tự.",
+    "skipped": "Đã bỏ qua. Phản hồi này vẫn giúp AI chỉnh đề xuất.",
+    "reported": "Đã lưu báo cáo. Hồ sơ này sẽ không được đề xuất lại."
+  },
+  "chat": {
+    "title": "Chat Tinh Chỉnh Gu",
+    "subtitle": "Nói với AI về gu, deal-breaker hoặc nhịp hẹn hò bạn muốn.",
+    "preferenceSummary": "Tóm tắt gu hiện tại",
+    "empty": "Hãy nói bạn muốn nhiều hơn hoặc ít hơn điều gì. Nội dung này ảnh hưởng đề xuất sau, không tạo match tức thì.",
+    "placeholder": "Ví dụ: Mình thích người điềm tĩnh, thích đọc sách..."
+  }
+}

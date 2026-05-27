@@ -1,0 +1,59 @@
+{
+  "loading": "Curating today's matches...",
+  "header": {
+    "badge": "AI-curated daily",
+    "title": "Today's AI Picks",
+    "subtitle": "You get 3-5 thoughtful matches per day.",
+    "subtitleWithDate": "{{count}} picks for {{date}}",
+    "refine": "Refine"
+  },
+  "summary": {
+    "pending": "{{count}} pick still needs your feedback",
+    "pending_plural": "{{count}} picks still need your feedback",
+    "done": "You've reviewed today's picks. New matches arrive tomorrow.",
+    "openMessages": "Open Messages"
+  },
+  "empty": {
+    "title": "No picks yet",
+    "description": "The AI needs more profile context before it can curate useful matches.",
+    "refine": "Refine preferences"
+  },
+  "status": {
+    "pending": "Needs feedback",
+    "accepted": "Waiting for them",
+    "declined": "Declined",
+    "skipped": "Skipped",
+    "reported": "Reported",
+    "matched": "Matched"
+  },
+  "card": {
+    "reasonTitle": "Why this match",
+    "feedbackPrompt": "Help AI learn",
+    "notePlaceholder": "Optional note for future recommendations...",
+    "skip": "Skip",
+    "decline": "Decline",
+    "accept": "Accept",
+    "report": "Report this profile"
+  },
+  "tags": {
+    "vibe": "Different vibe",
+    "campus": "Different campus",
+    "interests": "Few shared interests",
+    "type": "Not my type",
+    "pace": "Different dating pace"
+  },
+  "notice": {
+    "waiting": "Saved. If they also accept, a conversation will open in Messages.",
+    "mutual": "Mutual match. Your conversation is ready in Messages.",
+    "declined": "Feedback saved. The AI will avoid similar mismatches.",
+    "skipped": "Skipped for now. This still helps tune your daily picks.",
+    "reported": "Report saved. This profile will not be recommended again."
+  },
+  "chat": {
+    "title": "Preference Chat",
+    "subtitle": "Tell the AI about your taste, deal-breakers, or dating pace.",
+    "preferenceSummary": "Current preference summary",
+    "empty": "Share what you want more or less of. This affects future daily picks, not instant matches.",
+    "placeholder": "Example: I prefer calm people who like books..."
+  }
+}

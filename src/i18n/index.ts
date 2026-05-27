@@ -6,13 +6,13 @@ import { detectDefaultLanguage, LANGUAGE_KEY } from './config';
 // Import translation files
 import commonEN from './locales/en/common.json';
 import authEN from './locales/en/auth.json';
-import datingEN from './locales/en/dating.json';
+import aiPicksEN from './locales/en/aiPicks.json';
 import blindDateEN from './locales/en/blindDate.json';
 import messagesEN from './locales/en/messages.json';
 
 import commonVI from './locales/vi/common.json';
 import authVI from './locales/vi/auth.json';
-import datingVI from './locales/vi/dating.json';
+import aiPicksVI from './locales/vi/aiPicks.json';
 import blindDateVI from './locales/vi/blindDate.json';
 import messagesVI from './locales/vi/messages.json';
 
@@ -20,14 +20,14 @@ const resources = {
   en: {
     common: commonEN,
     auth: authEN,
-    dating: datingEN,
+    aiPicks: aiPicksEN,
     blindDate: blindDateEN,
     messages: messagesEN,
   },
   vi: {
     common: commonVI,
     auth: authVI,
-    dating: datingVI,
+    aiPicks: aiPicksVI,
     blindDate: blindDateVI,
     messages: messagesVI,
   },
@@ -41,7 +41,7 @@ i18n
     lng: detectDefaultLanguage(),
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'auth', 'dating', 'blindDate', 'messages'],
+    ns: ['common', 'auth', 'aiPicks', 'blindDate', 'messages'],
     interpolation: {
       escapeValue: false, // React already escapes
     },

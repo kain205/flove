@@ -76,7 +76,7 @@ const AnonymousChat = ({ session, onBack, onRevealAccepted }: AnonymousChatProps
     setRevealResult('pending');
 
     try {
-      const result = await chatService.requestReveal();
+      const result = await chatService.requestReveal(session.id);
       setRevealResult(result.accepted ? 'accepted' : 'rejected');
       
       if (result.accepted) {

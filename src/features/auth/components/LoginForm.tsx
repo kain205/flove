@@ -9,9 +9,10 @@ interface LoginFormProps {
   onSubmit: (email: string, password: string) => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  onNavigateToSignup?: () => void;
 }
 
-const LoginForm = ({ onSubmit, isLoading, error }: LoginFormProps) => {
+const LoginForm = ({ onSubmit, isLoading, error, onNavigateToSignup }: LoginFormProps) => {
   const { t } = useTranslation('auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,6 +119,7 @@ const LoginForm = ({ onSubmit, isLoading, error }: LoginFormProps) => {
       <Button
         type="button"
         variant="outline"
+        onClick={onNavigateToSignup}
         className="w-full h-14 rounded-xl border-2 border-primary/20 text-primary font-semibold hover:bg-primary/5 hover:border-primary/40 transition-all duration-300 cursor-pointer"
       >
         {t('loginForm.createAccount')}

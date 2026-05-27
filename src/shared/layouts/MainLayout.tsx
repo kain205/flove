@@ -1,16 +1,16 @@
 import { ReactNode } from 'react';
-import { Heart, Compass, Shuffle, MessageCircle, User } from 'lucide-react';
+import { Heart, Sparkles, Shuffle, MessageCircle, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface MainLayoutProps {
   children: ReactNode;
-  activeTab: 'discovery' | 'blind-date' | 'messages' | 'profile';
-  onTabChange: (tab: 'discovery' | 'blind-date' | 'messages' | 'profile') => void;
+  activeTab: 'ai-picks' | 'blind-date' | 'messages' | 'profile';
+  onTabChange: (tab: 'ai-picks' | 'blind-date' | 'messages' | 'profile') => void;
 }
 
 const tabs = [
-  { id: 'discovery' as const, labelKey: 'navigation.discover', icon: Compass },
+  { id: 'ai-picks' as const, labelKey: 'navigation.aiPicks', icon: Sparkles },
   { id: 'blind-date' as const, labelKey: 'navigation.blindDate', icon: Shuffle },
   { id: 'messages' as const, labelKey: 'navigation.messages', icon: MessageCircle },
   { id: 'profile' as const, labelKey: 'navigation.profile', icon: User },

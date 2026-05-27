@@ -26,7 +26,7 @@ const ConversationList = ({ conversations, onSelectConversation }: ConversationL
         </div>
         <h3 className="font-semibold text-foreground mb-1">No Messages Yet</h3>
         <p className="text-sm text-muted-foreground">
-          Start swiping to match and chat with other students!
+          Review your AI Picks to open a chat after both people accept.
         </p>
       </div>
     );

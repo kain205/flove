@@ -3,28 +3,28 @@
     "name": "F-Love"
   },
   "navigation": {
-    "discover": "Khám Phá",
-    "blindDate": "Hẹn Hò Bí Mật",
+    "aiPicks": "AI Picks",
+    "blindDate": "Hẹn Ẩn Danh",
     "messages": "Tin Nhắn",
     "profile": "Hồ Sơ"
   },
   "actions": {
-    "back": "Quay Lại",
-    "refresh": "Làm Mới",
+    "back": "Quay lại",
+    "refresh": "Làm mới",
     "send": "Gửi",
     "close": "Đóng",
-    "continue": "Tiếp Tục"
+    "continue": "Tiếp tục"
   },
   "status": {
     "loading": "Đang tải...",
-    "online": "Trực Tuyến",
-    "offline": "Ngoại Tuyến"
+    "online": "Trực tuyến",
+    "offline": "Ngoại tuyến"
   },
   "majors": {
-    "SE": "Kỹ Thuật Phần Mềm",
-    "AI": "Trí Tuệ Nhân Tạo",
-    "Biz": "Quản Trị Kinh Doanh",
-    "Design": "Thiết Kế Đồ Họa",
-    "Marketing": "Marketing Số"
+    "SE": "Kỹ thuật phần mềm",
+    "AI": "Trí tuệ nhân tạo",
+    "Biz": "Quản trị kinh doanh",
+    "Design": "Thiết kế đồ họa",
+    "Marketing": "Marketing số"
   }
 }

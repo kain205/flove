@@ -11,6 +11,11 @@ export interface User {
   interests: string[];
 }
 
+// Firestore user document
+export interface UserProfile extends User {
+  createdAt: Date;
+}
+
 export interface Profile extends User {
   distance?: string;
   isOnline?: boolean;
@@ -34,6 +39,74 @@ export interface Match {
   matchedUser: User;
   matchedAt: Date;
   isRevealed: boolean;
+}
+
+// AI-curated matching
+export type CuratedMatchStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'skipped'
+  | 'reported'
+  | 'matched';
+
+export type MatchFeedbackDecision =
+  | 'accepted'
+  | 'declined'
+  | 'skipped'
+  | 'reported';
+
+export interface PreferenceProfile {
+  id: string;
+  userId: string;
+  summary: string;
+  hardFilters: string[];
+  softPreferences: string[];
+  feedbackSummary: string[];
+  updatedAt: Date;
+}
+
+export interface CuratedMatch {
+  id: string;
+  batchId: string;
+  userId: string;
+  candidateId: string;
+  candidate: Profile;
+  pairKey: string;
+  aiReason: string;
+  compatibilityLabel: string;
+  compatibilityScore: number;
+  status: CuratedMatchStatus;
+  feedbackTags: string[];
+  feedbackNote?: string;
+  createdAt: Date;
+  decidedAt?: Date;
+}
+
+export interface DailyMatchBatch {
+  id: string;
+  userId: string;
+  date: string;
+  matches: CuratedMatch[];
+  createdAt: Date;
+}
+
+export interface MatchFeedback {
+  id: string;
+  matchId: string;
+  userId: string;
+  candidateId: string;
+  decision: MatchFeedbackDecision;
+  tags: string[];
+  note?: string;
+  createdAt: Date;
+}
+
+export interface PreferenceChatMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  content: string;
+  createdAt: Date;
 }
 
 // Chat Types
