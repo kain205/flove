@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import LandingPage from './LandingPage';
 import LoginPage from '@/features/auth/pages/LoginPage';
 import MainLayout, { AppTab } from '@/shared/layouts/MainLayout';
@@ -62,10 +62,6 @@ const Index = () => {
       return <LoginPage onLoginSuccess={setUser} />;
     }
     return <LandingPage onLoginSuccess={setUser} />;
-  }
-
-  if (location.pathname === '/') {
-    return <Navigate to={TAB_PATHS['ai-picks']} replace />;
   }
 
   const handleTabChange = (tab: AppTab) => {
