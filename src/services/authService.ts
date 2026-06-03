@@ -12,29 +12,18 @@ import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types';
 import { disableMockMode, enableMockMode, getMockUser, isMockMode, MOCK_USER } from './mockService';
 import { normalizeProfileText } from './profileService';
+import { appUserFromFirebase, userProfileFromFirestore } from './firestoreMappers';
 
 export const FPT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
 
-function toAppUser(fbUser: FirebaseUser, profile: Partial<UserProfile>): User {
-  const profileText = normalizeProfileText(profile);
+type AuthChangedStatus = 'checking' | 'guest' | 'authenticated' | 'profileHydrating';
 
+function basicFirebaseProfile(fbUser: FirebaseUser): Partial<UserProfile> {
   return {
-    id: fbUser.uid,
-    email: fbUser.email ?? '',
-    name: profile.name ?? fbUser.email?.split('@')[0] ?? '',
-    age: profile.age ?? 0,
-    major: profile.major ?? 'SE',
-    campus: profile.campus ?? 'HCM',
-    avatar: profile.avatar ?? '',
-    bio: profile.bio ?? '',
-    interests: profile.interests ?? [],
-    personalityTags: profile.personalityTags ?? [],
-    datingGoals: profile.datingGoals ?? [],
-    preferredVibes: profile.preferredVibes ?? [],
-    profileText,
-    profileCompleteness: profile.profileCompleteness ?? 0,
-    onboardingSource: profile.onboardingSource,
-    aiSignals: profile.aiSignals,
+    name: fbUser.displayName ?? '',
+    avatar: fbUser.photoURL ?? '',
+    bio: '',
+    interests: [],
   };
 }
 
@@ -49,7 +38,7 @@ export const authService = {
     }
     const result = await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
     const profile = await authService.fetchProfile(result.user.uid);
-    return toAppUser(result.user, profile ?? {});
+    return appUserFromFirebase(result.user, profile ?? {});
   },
 
   async logout(): Promise<void> {
@@ -69,7 +58,7 @@ export const authService = {
     const fbUser = auth.currentUser;
     if (!fbUser) return null;
     const profile = await authService.fetchProfile(fbUser.uid);
-    return toAppUser(fbUser, profile ?? {});
+    return appUserFromFirebase(fbUser, profile ?? {});
   },
 
   async signup(
@@ -102,7 +91,7 @@ export const authService = {
       createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, 'users', result.user.uid), userDoc);
-    return toAppUser(result.user, profile);
+    return appUserFromFirebase(result.user, profile);
   },
 
   async fetchProfile(uid: string): Promise<UserProfile | null> {
@@ -116,67 +105,31 @@ export const authService = {
 
     const snap = await getDoc(doc(db, 'users', uid));
     if (!snap.exists()) return null;
-    const data = snap.data();
-    return {
-      id: uid,
-      email: data.email ?? '',
-      name: data.name ?? '',
-      age: data.age ?? 0,
-      major: data.major ?? 'SE',
-      campus: data.campus ?? 'HCM',
-      avatar: data.avatar ?? '',
-      bio: data.bio ?? '',
-      interests: data.interests ?? [],
-      personalityTags: data.personalityTags ?? [],
-      datingGoals: data.datingGoals ?? [],
-      preferredVibes: data.preferredVibes ?? [],
-      profileText: normalizeProfileText({
-        bio: data.bio ?? '',
-        profileText: data.profileText as User['profileText'],
-      }),
-      profileCompleteness: data.profileCompleteness ?? 0,
-      onboardingSource: data.onboardingSource,
-      aiSignals: data.aiSignals
-        ? {
-            ...data.aiSignals,
-            lastProcessedAt: data.aiSignals.lastProcessedAt?.toDate?.() ?? data.aiSignals.lastProcessedAt,
-          }
-        : undefined,
-      createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    };
+    return userProfileFromFirestore(uid, snap.data());
   },
 
-  onAuthChanged(callback: (user: User | null) => void): () => void {
+  onAuthChanged(callback: (user: User | null, status?: AuthChangedStatus) => void): () => void {
     if (isMockMode()) {
-      callback(getMockUser());
+      callback(getMockUser(), 'authenticated');
       return () => {};
     }
 
     return onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) {
-        callback(null);
+        callback(null, 'guest');
         return;
       }
 
-      callback(toAppUser(fbUser, {
-        name: fbUser.displayName ?? '',
-        avatar: fbUser.photoURL ?? '',
-        bio: '',
-        interests: [],
-      }));
+      const basicUser = appUserFromFirebase(fbUser, basicFirebaseProfile(fbUser));
+      callback(basicUser, 'profileHydrating');
 
       void (async () => {
         try {
           const profile = await authService.fetchProfile(fbUser.uid);
-          callback(toAppUser(fbUser, profile ?? {}));
+          callback(appUserFromFirebase(fbUser, profile ?? {}), 'authenticated');
         } catch {
           // Firestore offline or error — still let user in with basic info
-          callback(toAppUser(fbUser, {
-            name: fbUser.displayName ?? '',
-            avatar: fbUser.photoURL ?? '',
-            bio: '',
-            interests: [],
-          }));
+          callback(basicUser, 'authenticated');
         }
       })();
     });
@@ -187,12 +140,7 @@ export const authService = {
     const result = await signInWithPopup(auth, provider);
     const fbUser = result.user;
 
-    const fallbackUser = toAppUser(fbUser, {
-      name: fbUser.displayName ?? '',
-      avatar: fbUser.photoURL ?? '',
-      bio: '',
-      interests: [],
-    });
+    const fallbackUser = appUserFromFirebase(fbUser, basicFirebaseProfile(fbUser));
 
     // Keep login responsive; Firestore can be slow on mobile/Tailscale.
     void (async () => {

@@ -1,30 +1,16 @@
-import { Suspense, lazy, useState, useEffect } from 'react';
+import { Suspense, lazy } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LandingPage from './LandingPage';
 import LoginPage from '@/features/auth/pages/LoginPage';
-import MainLayout, { AppTab } from '@/shared/layouts/MainLayout';
-import { User } from '@/types';
-import { authService } from '@/services/authService';
+import MainLayout from '@/shared/layouts/MainLayout';
+import { getActiveTabForPath, getPathForTab, type AppTab } from '@/app/routes';
+import { useAuth } from '@/features/auth/useAuth';
 
 const AiPicksPage = lazy(() => import('@/features/ai-picks/pages/AiPicksPage'));
 const BlindDatePage = lazy(() => import('@/features/blind-date/pages/BlindDatePage'));
 const MessagesPage = lazy(() => import('@/features/messages/pages/MessagesPage'));
 const ProfilePage = lazy(() => import('@/features/profile/pages/ProfilePage'));
-
-const TAB_PATHS: Record<AppTab, string> = {
-  'ai-picks': '/ai-picks',
-  'blind-date': '/blind-date',
-  messages: '/messages',
-  profile: '/profile',
-};
-
-function getActiveTab(pathname: string): AppTab {
-  if (pathname.startsWith('/blind-date')) return 'blind-date';
-  if (pathname.startsWith('/messages')) return 'messages';
-  if (pathname.startsWith('/profile')) return 'profile';
-  return 'ai-picks';
-}
 
 const PageLoading = () => (
   <div className="min-h-[50vh] flex items-center justify-center">
@@ -35,20 +21,10 @@ const PageLoading = () => (
 const Index = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const activeTab = getActiveTab(location.pathname);
+  const { user, status, refreshProfile } = useAuth();
+  const activeTab = getActiveTabForPath(location.pathname);
 
-  useEffect(() => {
-    const unsubscribe = authService.onAuthChanged((u) => {
-      setUser(u);
-      setIsLoading(false);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  if (isLoading) {
+  if (status === 'checking') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -59,13 +35,13 @@ const Index = () => {
   if (!user) {
     const isMobile = Capacitor.isNativePlatform();
     if (isMobile) {
-      return <LoginPage onLoginSuccess={setUser} />;
+      return <LoginPage onLoginSuccess={() => void refreshProfile()} />;
     }
-    return <LandingPage onLoginSuccess={setUser} />;
+    return <LandingPage onLoginSuccess={() => void refreshProfile()} />;
   }
 
   const handleTabChange = (tab: AppTab) => {
-    navigate(TAB_PATHS[tab]);
+    navigate(getPathForTab(tab));
   };
 
   const renderContent = () => {
@@ -74,8 +50,8 @@ const Index = () => {
         return (
           <AiPicksPage
             user={user}
-            onNavigateToMessages={() => navigate(TAB_PATHS.messages)}
-            onNavigateToProfile={() => navigate(TAB_PATHS.profile)}
+            onNavigateToMessages={() => navigate(getPathForTab('messages'))}
+            onNavigateToProfile={() => navigate(getPathForTab('profile'))}
           />
         );
       case 'blind-date':
@@ -86,8 +62,8 @@ const Index = () => {
         return (
           <ProfilePage
             user={user}
-            onUserUpdate={setUser}
-            onNavigateToAiPicks={() => navigate(TAB_PATHS['ai-picks'])}
+            onUserUpdate={() => void refreshProfile()}
+            onNavigateToAiPicks={() => navigate(getPathForTab('ai-picks'))}
           />
         );
       default:

@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { Camera, CheckCircle2, Circle, LogOut, Save, Sparkles } from 'lucide-react';
+import { Camera, LogOut, Save, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { authService } from '@/services/authService';
 import { db, storage } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User } from '@/types';
+import { useAuth } from '@/features/auth/useAuth';
 import {
   buildProfileSavePayload,
   CAMPUSES,
@@ -17,10 +17,10 @@ import {
   MAJORS,
   normalizeProfileText,
   PERSONALITY_TAGS,
-  ProfileRequirementId,
   PREFERRED_VIBES,
   SAMPLE_PROFILE,
 } from '@/services/profileService';
+import ProfileCompletenessChecklist from '../components/ProfileCompletenessChecklist';
 
 interface ProfilePageProps {
   user: User;
@@ -29,17 +29,6 @@ interface ProfilePageProps {
 }
 
 const SAVE_TIMEOUT_MS = 10000;
-
-const REQUIREMENT_LABELS: Record<ProfileRequirementId, string> = {
-  name: 'Tên hiển thị',
-  age: 'Tuổi từ 17 trở lên',
-  campus: 'Campus',
-  major: 'Ngành học',
-  interests: 'Ít nhất 3 sở thích',
-  personalityTags: 'Ít nhất 1 vibe cá nhân',
-  datingGoals: 'Ít nhất 1 mục tiêu kết nối',
-  profileText: 'Ít nhất 1 bio hoặc câu trả lời',
-};
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -55,6 +44,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 }
 
 const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePageProps) => {
+  const { signOut } = useAuth();
   const initialProfileText = normalizeProfileText(user);
   const [name, setName] = useState(user.name);
   const [age, setAge] = useState(user.age ? String(user.age) : '');
@@ -430,24 +420,7 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-2">
-            {readiness.requirements.map(requirement => {
-              const Icon = requirement.isMet ? CheckCircle2 : Circle;
-              return (
-                <div
-                  key={requirement.id}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${
-                    requirement.isMet
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-muted/50 text-muted-foreground'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{REQUIREMENT_LABELS[requirement.id]}</span>
-                </div>
-              );
-            })}
-          </div>
+          <ProfileCompletenessChecklist readiness={readiness} layout="grid" />
         </div>
 
         {/* Save button */}
@@ -485,7 +458,7 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
         {/* Logout */}
         <Button
           variant="ghost"
-          onClick={() => authService.logout()}
+          onClick={() => void signOut()}
           className="w-full h-12 rounded-xl text-destructive hover:bg-destructive/10 font-medium"
         >
           <LogOut className="w-4 h-4 mr-2" />

@@ -1,10 +1,13 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import { APP_ROUTES, CHAT_ROUTE } from "./app/routes";
+import { AuthProvider } from "./features/auth/AuthContext";
+import { useAuth } from "./features/auth/useAuth";
 
 const Index = lazy(() => import("./pages/Index"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -18,6 +21,20 @@ const AppLoading = () => (
   </div>
 );
 
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+  const { user, status } = useAuth();
+
+  if (status === "checking") {
+    return <AppLoading />;
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 const App = () => (
   <AppErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -25,18 +42,25 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Suspense fallback={<AppLoading />}>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/ai-picks" element={<Index />} />
-              <Route path="/blind-date" element={<Index />} />
-              <Route path="/messages" element={<Index />} />
-              <Route path="/profile" element={<Index />} />
-              <Route path="/chat/:conversationId" element={<ChatRoomPage />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+          <AuthProvider>
+            <Suspense fallback={<AppLoading />}>
+              <Routes>
+                {APP_ROUTES.map(route => (
+                  <Route key={route.path} path={route.path} element={<Index />} />
+                ))}
+                <Route
+                  path={CHAT_ROUTE.path}
+                  element={(
+                    <ProtectedRoute>
+                      <ChatRoomPage />
+                    </ProtectedRoute>
+                  )}
+                />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

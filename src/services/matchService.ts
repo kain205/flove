@@ -7,27 +7,13 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { Match, Profile } from '@/types';
+import { Match } from '@/types';
+import { profileFromFirestore } from './firestoreMappers';
 
 function currentUid(): string {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Not authenticated');
   return uid;
-}
-
-function docToProfile(id: string, data: Record<string, unknown>): Profile {
-  return {
-    id,
-    email: (data.email as string) ?? '',
-    name: (data.name as string) ?? 'FPT Student',
-    age: (data.age as number) ?? 0,
-    major: (data.major as Profile['major']) ?? 'SE',
-    campus: (data.campus as Profile['campus']) ?? 'HCM',
-    avatar: (data.avatar as string) ?? '',
-    bio: (data.bio as string) ?? '',
-    interests: (data.interests as string[]) ?? [],
-    isOnline: false,
-  };
 }
 
 export const matchService = {
@@ -46,7 +32,7 @@ export const matchService = {
       matches.push({
         id: matchDoc.id,
         matchedUser: userSnap?.exists()
-          ? docToProfile(userSnap.id, userSnap.data() as Record<string, unknown>)
+          ? profileFromFirestore(userSnap.id, userSnap.data())
           : {
               id: otherUid,
               email: '',

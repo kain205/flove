@@ -1,31 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, Circle, MessageCircle, RefreshCw, Sparkles, UserRound } from 'lucide-react';
+import { CalendarDays, MessageCircle, RefreshCw, Sparkles, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import CuratedMatchCard from '../components/CuratedMatchCard';
 import PreferenceChatPanel from '../components/PreferenceChatPanel';
 import { curatedMatchService } from '@/services/curatedMatchService';
-import { getProfileReadiness, ProfileRequirementId } from '@/services/profileService';
+import type { MatchingGateway } from '@/services/curatedMatchService';
+import { getProfileReadiness } from '@/services/profileService';
 import { CuratedMatch, DailyMatchBatch, MatchFeedbackDecision, User } from '@/types';
+import ProfileCompletenessChecklist from '@/features/profile/components/ProfileCompletenessChecklist';
 
 interface AiPicksPageProps {
   user: User;
   onNavigateToMessages: () => void;
   onNavigateToProfile: () => void;
+  matchingGateway?: MatchingGateway;
 }
 
-const REQUIREMENT_LABELS: Record<ProfileRequirementId, string> = {
-  name: 'Tên hiển thị',
-  age: 'Tuổi từ 17 trở lên',
-  campus: 'Campus',
-  major: 'Ngành học',
-  interests: 'Ít nhất 3 sở thích',
-  personalityTags: 'Ít nhất 1 vibe cá nhân',
-  datingGoals: 'Ít nhất 1 mục tiêu kết nối',
-  profileText: 'Ít nhất 1 bio hoặc câu trả lời',
-};
-
-const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPicksPageProps) => {
+const AiPicksPage = ({
+  user,
+  onNavigateToMessages,
+  onNavigateToProfile,
+  matchingGateway = curatedMatchService,
+}: AiPicksPageProps) => {
   const { t } = useTranslation('aiPicks');
   const readiness = useMemo(() => getProfileReadiness(user), [user]);
   const [batch, setBatch] = useState<DailyMatchBatch | null>(null);
@@ -44,7 +41,7 @@ const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPick
 
     setIsLoading(true);
     try {
-      const today = await curatedMatchService.getTodayMatches();
+      const today = await matchingGateway.getTodayMatches();
       setBatch(today);
     } catch (error) {
       console.error('Failed to load AI picks', error);
@@ -53,7 +50,7 @@ const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPick
     } finally {
       setIsLoading(false);
     }
-  }, [readiness.isComplete, t]);
+  }, [matchingGateway, readiness.isComplete, t]);
 
   useEffect(() => {
     loadMatches();
@@ -68,7 +65,7 @@ const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPick
     setWorkingMatchId(matchId);
     setNotice(null);
     try {
-      const result = await curatedMatchService.acceptMatch(matchId, tags, note);
+      const result = await matchingGateway.acceptMatch(matchId, tags, note);
       setNotice(result.isMutual ? t('notice.mutual') : t('notice.waiting'));
       await loadMatches();
     } finally {
@@ -85,7 +82,7 @@ const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPick
     setWorkingMatchId(matchId);
     setNotice(null);
     try {
-      await curatedMatchService.submitFeedback(matchId, decision, tags, note);
+      await matchingGateway.submitFeedback(matchId, decision, tags, note);
       setNotice(t(`notice.${decision}`));
       await loadMatches();
     } finally {
@@ -139,24 +136,7 @@ const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPick
               </div>
             </div>
 
-            <div className="space-y-3">
-              {readiness.requirements.map(requirement => {
-                const Icon = requirement.isMet ? CheckCircle2 : Circle;
-                return (
-                  <div
-                    key={requirement.id}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm ${
-                      requirement.isMet
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-muted/50 text-muted-foreground'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="font-medium">{REQUIREMENT_LABELS[requirement.id]}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <ProfileCompletenessChecklist readiness={readiness} />
 
             <Button
               type="button"

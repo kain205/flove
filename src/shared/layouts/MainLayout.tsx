@@ -1,22 +1,14 @@
 import { ReactNode } from 'react';
-import { Heart, Sparkles, Shuffle, MessageCircle, User } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { APP_NAV_ROUTES, type AppTab } from '@/app/routes';
 
 interface MainLayoutProps {
   children: ReactNode;
   activeTab: AppTab;
   onTabChange: (tab: AppTab) => void;
 }
-
-export type AppTab = 'ai-picks' | 'blind-date' | 'messages' | 'profile';
-
-const tabs = [
-  { id: 'ai-picks' as const, labelKey: 'navigation.aiPicks', icon: Sparkles },
-  { id: 'blind-date' as const, labelKey: 'navigation.blindDate', icon: Shuffle },
-  { id: 'messages' as const, labelKey: 'navigation.messages', icon: MessageCircle },
-  { id: 'profile' as const, labelKey: 'navigation.profile', icon: User },
-];
 
 const MainLayout = ({ children, activeTab, onTabChange }: MainLayoutProps) => {
   const { t } = useTranslation('common');
@@ -45,14 +37,14 @@ const MainLayout = ({ children, activeTab, onTabChange }: MainLayoutProps) => {
 
       {/* Bottom Navigation - Enhanced design */}
       <nav className="flex items-center justify-around p-3 glass border-t border-border/30 safe-area-bottom">
-        {tabs.map((tab) => {
+        {APP_NAV_ROUTES.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = activeTab === tab.tab;
           
           return (
             <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+              key={tab.path}
+              onClick={() => onTabChange(tab.tab)}
               aria-current={isActive ? 'page' : undefined}
               className={`
                 relative flex flex-col items-center gap-1.5 py-2 px-5 rounded-2xl transition-all duration-300 cursor-pointer
