@@ -12,6 +12,7 @@ export interface AuthServiceContract {
 export interface AuthContextValue {
   user: User | null;
   status: AuthStatus;
+  setAuthenticatedUser: (user: User, status?: Extract<AuthStatus, 'authenticated' | 'profileHydrating'>) => void;
   refreshProfile: () => Promise<User | null>;
   signOut: () => Promise<void>;
 }

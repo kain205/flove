@@ -8,6 +8,7 @@ import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User } from '@/types';
 import { useAuth } from '@/features/auth/useAuth';
+import { debugLog, debugWarn, elapsedMs, startTimer } from '@/lib/debugLog';
 import {
   buildProfileSavePayload,
   CAMPUSES,
@@ -155,15 +156,29 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
     const updated = { ...user, ...updates };
 
     try {
+      const startedAt = startTimer();
+      debugLog('profile', 'save start', {
+        userId: user.id,
+        profileCompleteness: updates.profileCompleteness,
+        payloadKeys: Object.keys(updates),
+      });
       await withTimeout(
         setDoc(doc(db, 'users', user.id), { ...updates, updatedAt: serverTimestamp() }, { merge: true }),
         SAVE_TIMEOUT_MS,
         'Lưu profile đang mất quá lâu. Kiểm tra mạng/Firebase rồi thử lại.'
       );
+      debugLog('profile', 'save done', {
+        elapsedMs: elapsedMs(startedAt),
+        userId: user.id,
+      });
       onUserUpdate(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
+      debugWarn('profile', 'save failed', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       console.error('Failed to save profile', error);
       setError(error instanceof Error ? error.message : 'Không lưu được profile.');
     } finally {

@@ -6,6 +6,7 @@ import LoginPage from '@/features/auth/pages/LoginPage';
 import MainLayout from '@/shared/layouts/MainLayout';
 import { getActiveTabForPath, getPathForTab, type AppTab } from '@/app/routes';
 import { useAuth } from '@/features/auth/useAuth';
+import type { User } from '@/types';
 
 const AiPicksPage = lazy(() => import('@/features/ai-picks/pages/AiPicksPage'));
 const BlindDatePage = lazy(() => import('@/features/blind-date/pages/BlindDatePage'));
@@ -21,8 +22,11 @@ const PageLoading = () => (
 const Index = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, status, refreshProfile } = useAuth();
+  const { user, status, setAuthenticatedUser } = useAuth();
   const activeTab = getActiveTabForPath(location.pathname);
+  const handleLoginSuccess = (nextUser: User) => {
+    setAuthenticatedUser(nextUser, 'profileHydrating');
+  };
 
   if (status === 'checking') {
     return (
@@ -35,9 +39,9 @@ const Index = () => {
   if (!user) {
     const isMobile = Capacitor.isNativePlatform();
     if (isMobile) {
-      return <LoginPage onLoginSuccess={() => void refreshProfile()} />;
+      return <LoginPage onLoginSuccess={handleLoginSuccess} />;
     }
-    return <LandingPage onLoginSuccess={() => void refreshProfile()} />;
+    return <LandingPage onLoginSuccess={handleLoginSuccess} />;
   }
 
   const handleTabChange = (tab: AppTab) => {
@@ -62,7 +66,7 @@ const Index = () => {
         return (
           <ProfilePage
             user={user}
-            onUserUpdate={() => void refreshProfile()}
+            onUserUpdate={(updatedUser) => setAuthenticatedUser(updatedUser, 'authenticated')}
             onNavigateToAiPicks={() => navigate(getPathForTab('ai-picks'))}
           />
         );
