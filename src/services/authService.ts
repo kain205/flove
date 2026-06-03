@@ -157,13 +157,28 @@ export const authService = {
         callback(null);
         return;
       }
-      try {
-        const profile = await authService.fetchProfile(fbUser.uid);
-        callback(toAppUser(fbUser, profile ?? {}));
-      } catch {
-        // Firestore offline or error — still let user in with basic info
-        callback(toAppUser(fbUser, {}));
-      }
+
+      callback(toAppUser(fbUser, {
+        name: fbUser.displayName ?? '',
+        avatar: fbUser.photoURL ?? '',
+        bio: '',
+        interests: [],
+      }));
+
+      void (async () => {
+        try {
+          const profile = await authService.fetchProfile(fbUser.uid);
+          callback(toAppUser(fbUser, profile ?? {}));
+        } catch {
+          // Firestore offline or error — still let user in with basic info
+          callback(toAppUser(fbUser, {
+            name: fbUser.displayName ?? '',
+            avatar: fbUser.photoURL ?? '',
+            bio: '',
+            interests: [],
+          }));
+        }
+      })();
     });
   },
 
