@@ -1,5 +1,8 @@
 {
   "loading": "Curating today's matches...",
+  "error": {
+    "load": "Could not load AI Picks. Refresh or update your profile, then try again."
+  },
   "header": {
     "badge": "AI-curated daily",
     "title": "Today's AI Picks",

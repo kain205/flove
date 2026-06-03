@@ -9,6 +9,25 @@ export interface User {
   avatar: string;
   bio: string;
   interests: string[];
+  personalityTags?: string[];
+  datingGoals?: string[];
+  preferredVibes?: string[];
+  profileText?: {
+    bio: string;
+    weekendStyle?: string;
+    conversationStyle?: string;
+    memorableThing?: string;
+    relationshipIntent?: string;
+  };
+  profileCompleteness?: number;
+  onboardingSource?: 'manual' | 'sample_autofill';
+  aiSignals?: {
+    profileEmbedding?: number[];
+    preferenceEmbedding?: number[];
+    summaryForMatching?: string;
+    lastProcessedAt?: Date;
+    version: number;
+  };
 }
 
 // Firestore user document

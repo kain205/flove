@@ -1,85 +1,184 @@
 import { useState } from 'react';
-import { Camera, LogOut, Save, X } from 'lucide-react';
+import { Camera, CheckCircle2, Circle, LogOut, Save, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authService } from '@/services/authService';
 import { db, storage } from '@/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User } from '@/types';
-
-const CAMPUSES = ['HCM', 'Hanoi', 'Danang', 'Cantho'] as const;
-const MAJORS = ['SE', 'AI', 'Biz', 'Design', 'Marketing'] as const;
-const INTERESTS = [
-  'Coding', 'Gaming', 'Music', 'Photography', 'Travel',
-  'Reading', 'Sports', 'Art', 'Coffee', 'Movies',
-  'Yoga', 'Dance', 'Cooking', 'AI/ML', 'Startups',
-  'Fashion', 'Basketball', 'Finance', 'Marketing',
-];
+import {
+  buildProfileSavePayload,
+  CAMPUSES,
+  DATING_GOALS,
+  getProfileReadiness,
+  INTERESTS,
+  MAJORS,
+  normalizeProfileText,
+  PERSONALITY_TAGS,
+  ProfileRequirementId,
+  PREFERRED_VIBES,
+  SAMPLE_PROFILE,
+} from '@/services/profileService';
 
 interface ProfilePageProps {
   user: User;
   onUserUpdate: (user: User) => void;
+  onNavigateToAiPicks?: () => void;
 }
 
-const ProfilePage = ({ user, onUserUpdate }: ProfilePageProps) => {
+const SAVE_TIMEOUT_MS = 10000;
+
+const REQUIREMENT_LABELS: Record<ProfileRequirementId, string> = {
+  name: 'Tên hiển thị',
+  age: 'Tuổi từ 17 trở lên',
+  campus: 'Campus',
+  major: 'Ngành học',
+  interests: 'Ít nhất 3 sở thích',
+  personalityTags: 'Ít nhất 1 vibe cá nhân',
+  datingGoals: 'Ít nhất 1 mục tiêu kết nối',
+  profileText: 'Ít nhất 1 bio hoặc câu trả lời',
+};
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => window.clearTimeout(timeout));
+  });
+}
+
+const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePageProps) => {
+  const initialProfileText = normalizeProfileText(user);
   const [name, setName] = useState(user.name);
   const [age, setAge] = useState(user.age ? String(user.age) : '');
   const [campus, setCampus] = useState(user.campus);
   const [major, setMajor] = useState(user.major);
-  const [bio, setBio] = useState(user.bio);
+  const [bio, setBio] = useState(initialProfileText.bio);
+  const [weekendStyle, setWeekendStyle] = useState(initialProfileText.weekendStyle ?? '');
+  const [conversationStyle, setConversationStyle] = useState(initialProfileText.conversationStyle ?? '');
+  const [memorableThing, setMemorableThing] = useState(initialProfileText.memorableThing ?? '');
+  const [relationshipIntent, setRelationshipIntent] = useState(initialProfileText.relationshipIntent ?? '');
   const [interests, setInterests] = useState<string[]>(user.interests);
+  const [personalityTags, setPersonalityTags] = useState<string[]>(user.personalityTags ?? []);
+  const [datingGoals, setDatingGoals] = useState<string[]>(user.datingGoals ?? []);
+  const [preferredVibes, setPreferredVibes] = useState<string[]>(user.preferredVibes ?? []);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
-  const toggleInterest = (interest: string) => {
-    setInterests(prev =>
-      prev.includes(interest)
-        ? prev.filter(i => i !== interest)
-        : prev.length < 8 ? [...prev, interest] : prev
+  const draftUser = {
+    ...user,
+    name,
+    age: parseInt(age) || 0,
+    campus,
+    major,
+    bio,
+    interests,
+    personalityTags,
+    datingGoals,
+    preferredVibes,
+    profileText: {
+      bio,
+      weekendStyle,
+      conversationStyle,
+      memorableThing,
+      relationshipIntent,
+    },
+  } as User;
+  const readiness = getProfileReadiness(draftUser);
+
+  const toggleLimited = (value: string, selected: string[], setSelected: (next: string[]) => void, limit: number) => {
+    setSelected(
+      selected.includes(value)
+        ? selected.filter(item => item !== value)
+        : selected.length < limit ? [...selected, value] : selected
     );
+  };
+
+  const applySampleProfile = () => {
+    setAge(String(SAMPLE_PROFILE.age));
+    setCampus(SAMPLE_PROFILE.campus);
+    setMajor(SAMPLE_PROFILE.major);
+    setBio(SAMPLE_PROFILE.bio);
+    setInterests(SAMPLE_PROFILE.interests);
+    setPersonalityTags(SAMPLE_PROFILE.personalityTags);
+    setDatingGoals(SAMPLE_PROFILE.datingGoals);
+    setPreferredVibes(SAMPLE_PROFILE.preferredVibes);
+    setWeekendStyle(SAMPLE_PROFILE.profileText.weekendStyle);
+    setConversationStyle(SAMPLE_PROFILE.profileText.conversationStyle);
+    setMemorableThing(SAMPLE_PROFILE.profileText.memorableThing);
+    setRelationshipIntent(SAMPLE_PROFILE.profileText.relationshipIntent);
   };
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploadingPhoto(true);
+    setError(null);
     try {
       const storageRef = ref(storage, `avatars/${user.id}`);
       await uploadBytes(storageRef, file);
       const avatarUrl = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, 'users', user.id), { avatar: avatarUrl });
+      await updateDoc(doc(db, 'users', user.id), { avatar: avatarUrl, updatedAt: serverTimestamp() });
       const updated = { ...user, avatar: avatarUrl };
-      localStorage.setItem('flove-user', JSON.stringify(updated));
       onUserUpdate(updated);
+    } catch (error) {
+      console.error('Failed to upload profile photo', error);
+      setError(error instanceof Error ? error.message : 'Không upload được ảnh.');
     } finally {
       setIsUploadingPhoto(false);
     }
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     setIsSaving(true);
-    const updates = {
+    setError(null);
+    setSaved(false);
+    const updates = buildProfileSavePayload(user, {
       name,
       age: parseInt(age) || 0,
       campus,
       major,
       bio,
       interests,
-    };
-    // Optimistic update
+      personalityTags,
+      datingGoals,
+      preferredVibes,
+      profileText: {
+        bio,
+        weekendStyle,
+        conversationStyle,
+        memorableThing,
+        relationshipIntent,
+      },
+    }, user.onboardingSource ?? 'manual');
     const updated = { ...user, ...updates };
-    localStorage.setItem('flove-user', JSON.stringify(updated));
-    onUserUpdate(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
 
-    // Save to Firestore in background
-    updateDoc(doc(db, 'users', user.id), updates)
-      .catch(console.error)
-      .finally(() => setIsSaving(false));
+    try {
+      await withTimeout(
+        setDoc(doc(db, 'users', user.id), { ...updates, updatedAt: serverTimestamp() }, { merge: true }),
+        SAVE_TIMEOUT_MS,
+        'Lưu profile đang mất quá lâu. Kiểm tra mạng/Firebase rồi thử lại.'
+      );
+      onUserUpdate(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error('Failed to save profile', error);
+      setError(error instanceof Error ? error.message : 'Không lưu được profile.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -111,7 +210,17 @@ const ProfilePage = ({ user, onUserUpdate }: ProfilePageProps) => {
       {/* Form */}
       <div className="px-4 -mt-8 pb-24 space-y-4">
         <div className="glass-card rounded-2xl p-5 shadow-card space-y-4">
-          <h3 className="font-semibold text-foreground">Thông tin cá nhân</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-foreground">Thông tin cá nhân</h3>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={applySampleProfile}
+              className="h-9 rounded-xl text-xs border-primary/30 text-primary hover:bg-primary/10"
+            >
+              Autofill sample
+            </Button>
+          </div>
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Tên hiển thị</Label>
@@ -174,10 +283,10 @@ const ProfilePage = ({ user, onUserUpdate }: ProfilePageProps) => {
             onChange={e => setBio(e.target.value)}
             placeholder="Vài dòng về bạn..."
             rows={3}
-            maxLength={200}
+            maxLength={240}
             className="w-full rounded-xl bg-muted/30 border border-border/50 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none text-sm"
           />
-          <p className="text-xs text-muted-foreground text-right">{bio.length}/200</p>
+          <p className="text-xs text-muted-foreground text-right">{bio.length}/240</p>
         </div>
 
         {/* Interests */}
@@ -191,7 +300,7 @@ const ProfilePage = ({ user, onUserUpdate }: ProfilePageProps) => {
               <button
                 key={interest}
                 type="button"
-                onClick={() => toggleInterest(interest)}
+                onClick={() => toggleLimited(interest, interests, setInterests, 8)}
                 className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   interests.includes(interest)
                     ? 'bg-primary text-primary-foreground'
@@ -204,13 +313,155 @@ const ProfilePage = ({ user, onUserUpdate }: ProfilePageProps) => {
           </div>
         </div>
 
+        <div className="glass-card rounded-2xl p-5 shadow-card space-y-3">
+          <Label className="font-semibold text-foreground">AI matching signals</Label>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Vibe của bạn</p>
+            <div className="flex flex-wrap gap-2">
+              {PERSONALITY_TAGS.map(tag => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleLimited(tag, personalityTags, setPersonalityTags, 4)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                    personalityTags.includes(tag)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Bạn muốn tìm gì?</p>
+            <div className="flex flex-wrap gap-2">
+              {DATING_GOALS.map(goal => (
+                <button
+                  key={goal}
+                  type="button"
+                  onClick={() => toggleLimited(goal, datingGoals, setDatingGoals, 3)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                    datingGoals.includes(goal)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {goal}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Kiểu người/vibe bạn dễ hợp</p>
+            <div className="flex flex-wrap gap-2">
+              {PREFERRED_VIBES.map(vibe => (
+                <button
+                  key={vibe}
+                  type="button"
+                  onClick={() => toggleLimited(vibe, preferredVibes, setPreferredVibes, 4)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                    preferredVibes.includes(vibe)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {vibe}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card rounded-2xl p-5 shadow-card space-y-3">
+          <Label className="font-semibold text-foreground">Quick questions</Label>
+          <textarea
+            value={weekendStyle}
+            onChange={e => setWeekendStyle(e.target.value)}
+            placeholder="Cuối tuần bạn thường làm gì?"
+            rows={2}
+            maxLength={180}
+            className="w-full rounded-xl bg-muted/30 border border-border/50 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none text-sm"
+          />
+          <textarea
+            value={conversationStyle}
+            onChange={e => setConversationStyle(e.target.value)}
+            placeholder="Bạn thích kiểu nói chuyện nào?"
+            rows={2}
+            maxLength={180}
+            className="w-full rounded-xl bg-muted/30 border border-border/50 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none text-sm"
+          />
+          <textarea
+            value={memorableThing}
+            onChange={e => setMemorableThing(e.target.value)}
+            placeholder="Bạn muốn người khác nhớ gì về bạn?"
+            rows={2}
+            maxLength={180}
+            className="w-full rounded-xl bg-muted/30 border border-border/50 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none text-sm"
+          />
+          <textarea
+            value={relationshipIntent}
+            onChange={e => setRelationshipIntent(e.target.value)}
+            placeholder="Bạn đang tìm điều gì trên F-Love?"
+            rows={2}
+            maxLength={180}
+            className="w-full rounded-xl bg-muted/30 border border-border/50 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none text-sm"
+          />
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+            {error}
+          </div>
+        )}
+
+        <div className="glass-card rounded-2xl p-5 shadow-card space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold text-foreground">Profile completeness</span>
+              <span className="font-semibold text-primary">{readiness.completeness}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${readiness.completeness}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-2">
+            {readiness.requirements.map(requirement => {
+              const Icon = requirement.isMet ? CheckCircle2 : Circle;
+              return (
+                <div
+                  key={requirement.id}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${
+                    requirement.isMet
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted/50 text-muted-foreground'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{REQUIREMENT_LABELS[requirement.id]}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Save button */}
         <Button
           onClick={handleSave}
           disabled={isSaving}
-          className="w-full h-14 rounded-xl gradient-primary text-primary-foreground font-semibold shadow-card hover:shadow-float transition-all duration-300"
+          className="w-full h-14 rounded-xl gradient-primary text-primary-foreground font-semibold shadow-card hover:shadow-float transition-all duration-300 disabled:opacity-100 disabled:cursor-wait"
         >
-          {saved ? (
+          {isSaving ? (
+            <span className="flex items-center gap-2">
+              <span className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              Đang lưu...
+            </span>
+          ) : saved ? (
             <span className="flex items-center gap-2">
               <Save className="w-5 h-5" /> Đã lưu!
             </span>
@@ -218,6 +469,18 @@ const ProfilePage = ({ user, onUserUpdate }: ProfilePageProps) => {
             'Lưu thay đổi'
           )}
         </Button>
+
+        {saved && readiness.isComplete && onNavigateToAiPicks && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onNavigateToAiPicks}
+            className="w-full h-12 rounded-xl border-primary/30 text-primary hover:bg-primary/10 font-medium"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Xem AI Picks
+          </Button>
+        )}
 
         {/* Logout */}
         <Button

@@ -73,7 +73,7 @@ const ChatRoomPage = () => {
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shadow-sm">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/messages')}
           className="w-10 h-10 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />

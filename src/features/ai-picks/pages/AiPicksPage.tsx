@@ -1,18 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, MessageCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Circle, MessageCircle, RefreshCw, Sparkles, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import CuratedMatchCard from '../components/CuratedMatchCard';
 import PreferenceChatPanel from '../components/PreferenceChatPanel';
 import { curatedMatchService } from '@/services/curatedMatchService';
-import { CuratedMatch, DailyMatchBatch, MatchFeedbackDecision } from '@/types';
+import { getProfileReadiness, ProfileRequirementId } from '@/services/profileService';
+import { CuratedMatch, DailyMatchBatch, MatchFeedbackDecision, User } from '@/types';
 
 interface AiPicksPageProps {
+  user: User;
   onNavigateToMessages: () => void;
+  onNavigateToProfile: () => void;
 }
 
-const AiPicksPage = ({ onNavigateToMessages }: AiPicksPageProps) => {
+const REQUIREMENT_LABELS: Record<ProfileRequirementId, string> = {
+  name: 'Tên hiển thị',
+  age: 'Tuổi từ 17 trở lên',
+  campus: 'Campus',
+  major: 'Ngành học',
+  interests: 'Ít nhất 3 sở thích',
+  personalityTags: 'Ít nhất 1 vibe cá nhân',
+  datingGoals: 'Ít nhất 1 mục tiêu kết nối',
+  profileText: 'Ít nhất 1 bio hoặc câu trả lời',
+};
+
+const AiPicksPage = ({ user, onNavigateToMessages, onNavigateToProfile }: AiPicksPageProps) => {
   const { t } = useTranslation('aiPicks');
+  const readiness = useMemo(() => getProfileReadiness(user), [user]);
   const [batch, setBatch] = useState<DailyMatchBatch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [workingMatchId, setWorkingMatchId] = useState<string | null>(null);
@@ -20,14 +35,25 @@ const AiPicksPage = ({ onNavigateToMessages }: AiPicksPageProps) => {
   const [showPreferenceChat, setShowPreferenceChat] = useState(false);
 
   const loadMatches = useCallback(async () => {
+    if (!readiness.isComplete) {
+      setBatch(null);
+      setIsLoading(false);
+      setNotice(null);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const today = await curatedMatchService.getTodayMatches();
       setBatch(today);
+    } catch (error) {
+      console.error('Failed to load AI picks', error);
+      setBatch(null);
+      setNotice(t('error.load'));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [readiness.isComplete, t]);
 
   useEffect(() => {
     loadMatches();
@@ -66,6 +92,84 @@ const AiPicksPage = ({ onNavigateToMessages }: AiPicksPageProps) => {
       setWorkingMatchId(null);
     }
   };
+
+  if (!readiness.isComplete) {
+    return (
+      <div className="h-full overflow-y-auto bg-background">
+        <div className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border/60">
+          <div className="max-w-6xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-2">
+                  <Sparkles className="w-4 h-4" />
+                  {t('header.badge')}
+                </div>
+                <h1 className="font-serif text-2xl font-bold text-foreground">
+                  {t('header.title')}
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Hoàn thiện profile để AI Picks có đủ tín hiệu chọn match phù hợp.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                onClick={onNavigateToProfile}
+                className="rounded-xl gradient-primary text-primary-foreground"
+              >
+                <UserRound className="w-4 h-4 mr-2" />
+                Sửa profile
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <main className="max-w-3xl mx-auto px-4 py-6">
+          <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-card space-y-5">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold text-foreground">Profile completeness</span>
+                <span className="font-semibold text-primary">{readiness.completeness}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${readiness.completeness}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {readiness.requirements.map(requirement => {
+                const Icon = requirement.isMet ? CheckCircle2 : Circle;
+                return (
+                  <div
+                    key={requirement.id}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm ${
+                      requirement.isMet
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted/50 text-muted-foreground'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="font-medium">{REQUIREMENT_LABELS[requirement.id]}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <Button
+              type="button"
+              onClick={onNavigateToProfile}
+              className="w-full h-12 rounded-xl gradient-primary text-primary-foreground font-semibold"
+            >
+              Hoàn thiện profile
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-background">

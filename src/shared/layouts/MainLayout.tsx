@@ -5,9 +5,11 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface MainLayoutProps {
   children: ReactNode;
-  activeTab: 'ai-picks' | 'blind-date' | 'messages' | 'profile';
-  onTabChange: (tab: 'ai-picks' | 'blind-date' | 'messages' | 'profile') => void;
+  activeTab: AppTab;
+  onTabChange: (tab: AppTab) => void;
 }
+
+export type AppTab = 'ai-picks' | 'blind-date' | 'messages' | 'profile';
 
 const tabs = [
   { id: 'ai-picks' as const, labelKey: 'navigation.aiPicks', icon: Sparkles },
@@ -23,16 +25,21 @@ const MainLayout = ({ children, activeTab, onTabChange }: MainLayoutProps) => {
       {/* Header - Enhanced glassmorphism */}
       <header className="flex items-center justify-between p-4 glass border-b border-border/30 sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft hover:shadow-glow transition-shadow duration-300 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => onTabChange('ai-picks')}
+            className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft hover:shadow-glow transition-shadow duration-300 cursor-pointer"
+            aria-label="Go to AI Picks"
+          >
             <Heart className="w-5 h-5 text-primary-foreground fill-primary-foreground" />
-          </div>
+          </button>
           <span className="font-serif text-lg font-bold text-foreground">F-Love</span>
         </div>
         <LanguageSwitcher />
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden bg-aurora">
+      <main className="flex-1 min-h-0 overflow-hidden bg-aurora">
         {children}
       </main>
 
@@ -46,6 +53,7 @@ const MainLayout = ({ children, activeTab, onTabChange }: MainLayoutProps) => {
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
+              aria-current={isActive ? 'page' : undefined}
               className={`
                 relative flex flex-col items-center gap-1.5 py-2 px-5 rounded-2xl transition-all duration-300 cursor-pointer
                 ${isActive 

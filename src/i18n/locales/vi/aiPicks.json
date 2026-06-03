@@ -1,5 +1,8 @@
 {
   "loading": "Đang chọn match hôm nay...",
+  "error": {
+    "load": "Chưa tải được AI Picks. Hãy refresh hoặc cập nhật hồ sơ rồi thử lại."
+  },
   "header": {
     "badge": "AI chọn mỗi ngày",
     "title": "AI Picks Hôm Nay",
