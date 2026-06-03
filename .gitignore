@@ -26,3 +26,6 @@ dist-ssr
 # UI/UX Pro Max
 .github
 .shared
+.claude/
+.firebase/
+estimate.txt

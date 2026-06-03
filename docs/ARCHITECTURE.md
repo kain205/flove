@@ -13,7 +13,7 @@ Blind Date remains a separate optional feature. It does not feed the AI-curated 
 - `ai-picks`: daily curated recommendations, feedback controls, and preference chat.
 - `messages`: direct conversations after mutual accept.
 - `blind-date`: anonymous chat/reveal flow kept as a secondary feature.
-- `profile`: user profile, bio, interests, major, campus, and avatar.
+- `profile`: real user profile, onboarding signals, bio/quick answers, interests, major, campus, and avatar.
 - `auth`: FPT email login/signup and profile bootstrap.
 
 The frontend uses Firebase Auth, Firestore, and Storage through `src/lib/firebase.ts`. AI provider calls must stay behind backend functions; the frontend only talks to app services.
@@ -25,7 +25,7 @@ The frontend uses Firebase Auth, Firestore, and Storage through `src/lib/firebas
   - Reads `curatedMatches`.
   - Records accept/decline/skip/report feedback.
   - Creates official `matches` and `conversations` after mutual accept.
-  - Uses local curation fallback when Firebase Functions are not enabled.
+  - Uses local curation fallback when Firebase Functions are not enabled. The fallback reads real Firestore `users` as candidates and uses structured profile signals where available.
 
 - `preferenceChatService`
   - Stores user preference chat messages.
@@ -52,10 +52,29 @@ preferenceChats/{uid}/messages/{messageId}
 
 Important fields:
 
+- `users.profileText`: user-facing text inputs for matching context (`bio`, `weekendStyle`, `conversationStyle`, `memorableThing`, `relationshipIntent`).
+- `users.interests`, `users.personalityTags`, `users.datingGoals`, `users.preferredVibes`: structured signals used for ranking and future embeddings.
+- `users.profileCompleteness`: percentage used to gate AI Picks until the profile has enough signal.
+- `users.onboardingSource`: `manual | sample_autofill`; sample autofill is only for the current real user during development/testing.
+- `users.aiSignals`: backend-owned matching signals such as embeddings, summary, processing timestamp, and version.
 - `curatedMatches.status`: `pending | accepted | declined | skipped | reported | matched`
 - `curatedMatches.pairKey`: sorted user IDs joined with `_`
 - `matches.source`: `ai-curated`
 - `conversations.matchId`: deterministic match id for the pair
+
+## Profile Onboarding Model
+
+The app no longer uses mock auth for the main flow. A user signs in with Firebase Auth, gets a real `users/{uid}` document, then completes onboarding before AI Picks can run.
+
+Onboarding collects:
+
+- Basic profile: display name, age, campus, major, and avatar from Google/upload.
+- Structured matching signals: interests, personality tags, dating goals, and preferred vibes.
+- Natural-language context: optional bio plus quick answers such as weekend style, conversation style, memorable thing, and relationship intent.
+
+The UI may offer `Autofill sample profile` for the current authenticated user to speed up development and demos. This writes normal profile fields to that real user's Firestore document and marks `onboardingSource: sample_autofill`. It does not switch the app into mock mode.
+
+Backend AI processing should read the user-facing profile fields, generate embeddings/summaries, and write them only under `users.aiSignals` or related backend-owned documents. Users do not see embedding or generated-summary controls in the UI.
 
 ## Matching Lifecycle
 
@@ -71,7 +90,14 @@ Important fields:
 
 Feedback is stored in `matchFeedback` and summarized into `preferenceProfiles/{uid}`. Accept feedback strengthens traits from the accepted candidate. Decline, skip, and report tags are stored as feedback summary signals. Preference chat updates the summary and soft preferences for future daily batches.
 
-The current fallback is deterministic and profile-based. Production AI should move scoring, explanations, safety checks, and preference learning into Firebase Functions.
+The current fallback is deterministic and profile-based. Production AI should move scoring, explanations, embeddings, safety checks, and preference learning into Firebase Functions.
+
+AI matching should use:
+
+- Self profile from the authenticated user's real Firestore document.
+- Candidate profiles from other real `users` documents in Firestore. Early demo profiles can be seeded as normal user documents if the app has no real user pool yet.
+- Structured profile fields for stable scoring and text fields/embeddings for semantic similarity.
+- `preferenceProfiles` and `matchFeedback` for learning from accept, decline, skip, report, and preference chat signals.
 
 ## Cleanup Notes
 
