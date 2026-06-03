@@ -9,6 +9,15 @@ interface LoginPageProps {
   onNavigateToSignup?: () => void;
 }
 
+function formatAuthError(error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  if (code === 'auth/unauthorized-domain') {
+    return `Firebase chưa authorize domain ${window.location.hostname}. Thêm domain này trong Firebase Authentication > Settings > Authorized domains.`;
+  }
+
+  return error instanceof Error ? error.message : 'Đăng nhập thất bại';
+}
+
 const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,24 +27,9 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
     setError(null);
     try {
       const user = await authService.loginWithGoogle();
-      localStorage.setItem('flove-user', JSON.stringify(user));
       onLoginSuccess(user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đăng nhập thất bại');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleMockLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const user = await authService.loginMock();
-      localStorage.setItem('flove-user', JSON.stringify(user));
-      onLoginSuccess(user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Mock login failed');
+      setError(formatAuthError(err));
     } finally {
       setIsLoading(false);
     }
@@ -100,14 +94,6 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
                 </svg>
               )}
               {isLoading ? 'Đang đăng nhập...' : 'Tiếp tục với Google'}
-            </Button>
-
-            <Button
-              onClick={handleMockLogin}
-              disabled={isLoading}
-              className="w-full h-14 rounded-xl gradient-primary text-primary-foreground font-semibold text-base cursor-pointer"
-            >
-              Continue with mock account
             </Button>
 
           </div>

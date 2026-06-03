@@ -316,6 +316,7 @@ export const chatService = {
 
     await setDoc(doc(db, 'blindDateSessions', convId), {
       ...session,
+      users: partnerId.startsWith('anon-') ? [uid] : [uid, partnerId],
       createdAt: serverTimestamp(),
     });
 

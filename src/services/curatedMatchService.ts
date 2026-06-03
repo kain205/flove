@@ -22,6 +22,7 @@ import {
   PreferenceProfile,
   Profile,
 } from '@/types';
+import { normalizeProfileText } from './profileService';
 
 type CuratedMatchDoc = Omit<CuratedMatch, 'candidate' | 'createdAt' | 'decidedAt'> & {
   candidateSnapshot: Profile;
@@ -31,6 +32,10 @@ type CuratedMatchDoc = Omit<CuratedMatch, 'candidate' | 'createdAt' | 'decidedAt
 
 const DAILY_PICK_LIMIT = 5;
 const MIN_DAILY_PICK_TARGET = 3;
+
+function isMockMatchId(matchId: string): boolean {
+  return matchId.startsWith('mock-');
+}
 
 function currentUid(): string {
   const uid = auth.currentUser?.uid;
@@ -66,17 +71,28 @@ function docToProfile(id: string, data: Record<string, unknown>): Profile {
     avatar: (data.avatar as string) ?? '',
     bio: (data.bio as string) ?? '',
     interests: (data.interests as string[]) ?? [],
+    personalityTags: (data.personalityTags as string[]) ?? [],
+    datingGoals: (data.datingGoals as string[]) ?? [],
+    preferredVibes: (data.preferredVibes as string[]) ?? [],
+    profileText: normalizeProfileText({
+      bio: (data.bio as string) ?? '',
+      profileText: data.profileText as Profile['profileText'],
+    }),
+    profileCompleteness: (data.profileCompleteness as number) ?? 0,
+    onboardingSource: data.onboardingSource as Profile['onboardingSource'],
     isOnline: false,
   };
 }
 
 function curatedDocToMatch(id: string, data: CuratedMatchDoc): CuratedMatch {
+  const candidate = docToProfile(data.candidateId, data.candidateSnapshot as unknown as Record<string, unknown>);
+
   return {
     id,
     batchId: data.batchId,
     userId: data.userId,
     candidateId: data.candidateId,
-    candidate: data.candidateSnapshot,
+    candidate,
     pairKey: data.pairKey,
     aiReason: data.aiReason,
     compatibilityLabel: data.compatibilityLabel,
@@ -163,12 +179,20 @@ function scoreCandidate(
     preference.summary,
     ...preference.softPreferences,
     ...preference.feedbackSummary,
+    ...(self?.preferredVibes ?? []),
+    ...(self?.datingGoals ?? []),
   ].join(' ').toLowerCase();
 
   let score = 58;
   score += Math.min(sharedInterests.length * 10, 24);
   if (self?.campus && self.campus === candidate.campus) score += 10;
   if (self?.major && self.major === candidate.major) score += 6;
+  candidate.personalityTags?.forEach(tag => {
+    if (preferenceText.includes(tag.toLowerCase())) score += 4;
+  });
+  candidate.datingGoals?.forEach(goal => {
+    if (self?.datingGoals?.includes(goal)) score += 5;
+  });
   candidate.interests.forEach(interest => {
     if (preferenceText.includes(interest.toLowerCase())) score += 4;
   });
@@ -195,6 +219,10 @@ function aiReason(self: Profile | null, candidate: Profile, score: number): stri
   }
   if (self?.major === candidate.major) {
     reasons.push(`similar academic context in ${candidate.major}`);
+  }
+  const matchingGoals = candidate.datingGoals?.filter(goal => self?.datingGoals?.includes(goal)) ?? [];
+  if (matchingGoals.length > 0) {
+    reasons.push(`similar intent around ${matchingGoals.slice(0, 2).join(' and ')}`);
   }
   if (candidate.bio) {
     reasons.push(`their bio suggests: "${candidate.bio.slice(0, 90)}${candidate.bio.length > 90 ? '...' : ''}"`);
@@ -353,19 +381,24 @@ export const curatedMatchService = {
       return mockService.getTodayMatches();
     }
 
-    const uid = currentUid();
-    const date = localDateKey();
-    const batchId = await ensureTodayBatch(uid, date);
-    const batchSnap = await getDoc(doc(db, 'dailyMatchBatches', batchId));
-    const matches = await readBatchMatches(batchId);
+    try {
+      const uid = currentUid();
+      const date = localDateKey();
+      const batchId = await ensureTodayBatch(uid, date);
+      const batchSnap = await getDoc(doc(db, 'dailyMatchBatches', batchId));
+      const matches = await readBatchMatches(batchId);
 
-    return {
-      id: batchId,
-      userId: uid,
-      date,
-      matches,
-      createdAt: toDate(batchSnap.data()?.createdAt),
-    };
+      return {
+        id: batchId,
+        userId: uid,
+        date,
+        matches,
+        createdAt: toDate(batchSnap.data()?.createdAt),
+      };
+    } catch (error) {
+      console.error('Falling back to local AI picks', error);
+      return mockService.getTodayMatches();
+    }
   },
 
   async submitFeedback(
@@ -374,7 +407,7 @@ export const curatedMatchService = {
     tags: string[],
     note?: string
   ): Promise<CuratedMatch> {
-    if (isMockMode()) {
+    if (isMockMode() || isMockMatchId(matchId)) {
       return mockService.submitFeedback(matchId, decision, tags, note);
     }
 
@@ -391,7 +424,7 @@ export const curatedMatchService = {
     tags: string[] = [],
     note?: string
   ): Promise<{ isMutual: boolean; conversationId?: string; match: CuratedMatch }> {
-    if (isMockMode()) {
+    if (isMockMode() || isMockMatchId(matchId)) {
       return mockService.acceptMatch(matchId, tags, note);
     }
 
@@ -467,6 +500,11 @@ export const curatedMatchService = {
       return mockService.getPreferenceProfile();
     }
 
-    return getPreferenceProfile(currentUid());
+    try {
+      return getPreferenceProfile(currentUid());
+    } catch (error) {
+      console.error('Falling back to local preference profile', error);
+      return mockService.getPreferenceProfile();
+    }
   },
 };

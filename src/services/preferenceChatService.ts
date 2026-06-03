@@ -50,26 +50,40 @@ export const preferenceChatService = {
       return mockService.subscribePreferenceMessages(callback);
     }
 
-    const uid = currentUid();
+    let uid: string;
+    try {
+      uid = currentUid();
+    } catch (error) {
+      console.error('Preference chat falling back to local messages', error);
+      return mockService.subscribePreferenceMessages(callback);
+    }
+
     const q = query(
       collection(db, 'preferenceChats', uid, 'messages'),
       orderBy('createdAt', 'asc'),
       limit(100)
     );
 
-    return onSnapshot(q, snap => {
-      callback(
-        snap.docs.map(messageDoc => {
-          const data = messageDoc.data();
-          return {
-            id: messageDoc.id,
-            sender: data.sender ?? 'assistant',
-            content: data.content ?? '',
-            createdAt: toDate(data.createdAt),
-          };
-        })
-      );
-    });
+    return onSnapshot(
+      q,
+      snap => {
+        callback(
+          snap.docs.map(messageDoc => {
+            const data = messageDoc.data();
+            return {
+              id: messageDoc.id,
+              sender: data.sender ?? 'assistant',
+              content: data.content ?? '',
+              createdAt: toDate(data.createdAt),
+            };
+          })
+        );
+      },
+      error => {
+        console.error('Preference chat falling back to local messages', error);
+        mockService.subscribePreferenceMessages(callback);
+      }
+    );
   },
 
   async sendMessage(content: string): Promise<void> {
@@ -78,39 +92,52 @@ export const preferenceChatService = {
       return;
     }
 
-    const uid = currentUid();
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    await addDoc(collection(db, 'preferenceChats', uid, 'messages'), {
-      sender: 'user',
-      content: trimmed,
-      createdAt: serverTimestamp(),
-    });
-
-    if (aiBackendService.isEnabled()) {
-      await aiBackendService.sendPreferenceChatMessage(trimmed);
+    let uid: string;
+    try {
+      uid = currentUid();
+    } catch (error) {
+      console.error('Preference chat send falling back to local messages', error);
+      mockService.sendPreferenceMessage(trimmed);
       return;
     }
 
-    const hints = extractPreferenceHints(trimmed);
-    const preferenceUpdate: Record<string, unknown> = {
-      userId: uid,
-      summary: trimmed,
-      feedbackSummary: arrayUnion(`preference chat: ${hints.join(', ') || trimmed}`),
-      updatedAt: serverTimestamp(),
-    };
+    try {
+      await addDoc(collection(db, 'preferenceChats', uid, 'messages'), {
+        sender: 'user',
+        content: trimmed,
+        createdAt: serverTimestamp(),
+      });
 
-    if (hints.length > 0) {
-      preferenceUpdate.softPreferences = arrayUnion(...hints);
+      if (aiBackendService.isEnabled()) {
+        await aiBackendService.sendPreferenceChatMessage(trimmed);
+        return;
+      }
+
+      const hints = extractPreferenceHints(trimmed);
+      const preferenceUpdate: Record<string, unknown> = {
+        userId: uid,
+        summary: trimmed,
+        feedbackSummary: arrayUnion(`preference chat: ${hints.join(', ') || trimmed}`),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (hints.length > 0) {
+        preferenceUpdate.softPreferences = arrayUnion(...hints);
+      }
+
+      await setDoc(doc(db, 'preferenceProfiles', uid), preferenceUpdate, { merge: true });
+
+      await addDoc(collection(db, 'preferenceChats', uid, 'messages'), {
+        sender: 'assistant',
+        content: assistantReply(trimmed),
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Preference chat send falling back to local messages', error);
+      mockService.sendPreferenceMessage(trimmed);
     }
-
-    await setDoc(doc(db, 'preferenceProfiles', uid), preferenceUpdate, { merge: true });
-
-    await addDoc(collection(db, 'preferenceChats', uid, 'messages'), {
-      sender: 'assistant',
-      content: assistantReply(trimmed),
-      createdAt: serverTimestamp(),
-    });
   },
 };

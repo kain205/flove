@@ -48,6 +48,7 @@ const CuratedMatchCard = ({
   const [selectedTags, setSelectedTags] = useState<string[]>(match.feedbackTags ?? []);
   const [note, setNote] = useState(match.feedbackNote ?? '');
   const isResolved = match.status !== 'pending';
+  const candidateInterests = match.candidate.interests ?? [];
 
   const tagOptions = useMemo(
     () => TAG_KEYS.map(key => ({
@@ -129,7 +130,7 @@ const CuratedMatchCard = ({
         )}
 
         <div className="flex flex-wrap gap-2">
-          {match.candidate.interests.slice(0, 6).map(interest => (
+          {candidateInterests.slice(0, 6).map(interest => (
             <span
               key={interest}
               className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"

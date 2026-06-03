@@ -11,10 +11,13 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types';
 import { disableMockMode, enableMockMode, getMockUser, isMockMode, MOCK_USER } from './mockService';
+import { normalizeProfileText } from './profileService';
 
 export const FPT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
 
 function toAppUser(fbUser: FirebaseUser, profile: Partial<UserProfile>): User {
+  const profileText = normalizeProfileText(profile);
+
   return {
     id: fbUser.uid,
     email: fbUser.email ?? '',
@@ -25,6 +28,13 @@ function toAppUser(fbUser: FirebaseUser, profile: Partial<UserProfile>): User {
     avatar: profile.avatar ?? '',
     bio: profile.bio ?? '',
     interests: profile.interests ?? [],
+    personalityTags: profile.personalityTags ?? [],
+    datingGoals: profile.datingGoals ?? [],
+    preferredVibes: profile.preferredVibes ?? [],
+    profileText,
+    profileCompleteness: profile.profileCompleteness ?? 0,
+    onboardingSource: profile.onboardingSource,
+    aiSignals: profile.aiSignals,
   };
 }
 
@@ -83,6 +93,12 @@ export const authService = {
       avatar: profile.avatar,
       bio: profile.bio,
       interests: profile.interests,
+      personalityTags: profile.personalityTags ?? [],
+      datingGoals: profile.datingGoals ?? [],
+      preferredVibes: profile.preferredVibes ?? [],
+      profileText: normalizeProfileText(profile),
+      profileCompleteness: profile.profileCompleteness ?? 0,
+      onboardingSource: profile.onboardingSource ?? 'manual',
       createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, 'users', result.user.uid), userDoc);
@@ -111,6 +127,21 @@ export const authService = {
       avatar: data.avatar ?? '',
       bio: data.bio ?? '',
       interests: data.interests ?? [],
+      personalityTags: data.personalityTags ?? [],
+      datingGoals: data.datingGoals ?? [],
+      preferredVibes: data.preferredVibes ?? [],
+      profileText: normalizeProfileText({
+        bio: data.bio ?? '',
+        profileText: data.profileText as User['profileText'],
+      }),
+      profileCompleteness: data.profileCompleteness ?? 0,
+      onboardingSource: data.onboardingSource,
+      aiSignals: data.aiSignals
+        ? {
+            ...data.aiSignals,
+            lastProcessedAt: data.aiSignals.lastProcessedAt?.toDate?.() ?? data.aiSignals.lastProcessedAt,
+          }
+        : undefined,
       createdAt: data.createdAt?.toDate?.() ?? new Date(),
     };
   },
@@ -138,48 +169,34 @@ export const authService = {
 
   async loginWithGoogle(): Promise<User> {
     const provider = new GoogleAuthProvider();
-    // TODO: restrict to fpt.edu.vn when going live
-    let result;
-    try {
-      result = await signInWithPopup(auth, provider);
-    } catch (error) {
-      if (
-        error instanceof Error
-        && (error.message.includes('auth/unauthorized-domain') || error.message.includes('unauthorized-domain'))
-      ) {
-        return enableMockMode();
-      }
-      throw error;
-    }
+    const result = await signInWithPopup(auth, provider);
     const fbUser = result.user;
 
-    // Return immediately using Google's data — no waiting for Firestore
-    const user = toAppUser(fbUser, {
+    const fallbackUser = toAppUser(fbUser, {
       name: fbUser.displayName ?? '',
       avatar: fbUser.photoURL ?? '',
       bio: '',
       interests: [],
     });
 
-    // Create/update Firestore doc in background
-    const userRef = doc(db, 'users', fbUser.uid);
-    getDoc(userRef).then((snap) => {
-      if (!snap.exists()) {
-        setDoc(userRef, {
+    // Keep login responsive; Firestore can be slow on mobile/Tailscale.
+    void (async () => {
+      try {
+        const userRef = doc(db, 'users', fbUser.uid);
+        const snap = await getDoc(userRef);
+        await setDoc(userRef, {
           email: fbUser.email,
           name: fbUser.displayName ?? '',
           avatar: fbUser.photoURL ?? '',
-          age: 0,
-          major: 'SE',
-          campus: 'HCM',
-          bio: '',
-          interests: [],
-          createdAt: serverTimestamp(),
-        });
+          createdAt: snap.exists() ? snap.data().createdAt ?? serverTimestamp() : serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (error) {
+        console.error('Failed to initialize Google profile', error);
       }
-    });
+    })();
 
-    return user;
+    return fallbackUser;
   },
 
   // kept for compatibility — no-ops since we use Firebase
@@ -187,9 +204,6 @@ export const authService = {
     return enableMockMode();
   },
 
-  saveUser(user: User): void {
-    localStorage.setItem('flove-user', JSON.stringify(user));
-  },
   clearUser(): void {
     disableMockMode();
   },

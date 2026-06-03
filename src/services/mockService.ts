@@ -234,8 +234,7 @@ function mockPartnerAccepted(match: CuratedMatch): boolean {
 }
 
 export function isMockMode(): boolean {
-  return import.meta.env.VITE_USE_MOCKS === 'true'
-    || (storageAvailable() && window.localStorage.getItem(MOCK_AUTH_KEY) === MOCK_AUTH_VALUE);
+  return import.meta.env.VITE_USE_MOCKS === 'true';
 }
 
 export function enableMockMode(): User {
