@@ -20,16 +20,25 @@ import {
   profileSignalCount,
   SAMPLE_PROFILE,
 } from '@/services/profileService';
+import { saveCachedProfile } from '@/services/profileCacheService';
 
 interface BioPromptPageProps {
   user: User;
   onComplete: (user: User) => void;
 }
 
+const FIRESTORE_SYNC_WAIT_MS = 10000;
+
 function toggleLimited(value: string, selected: string[], limit: number): string[] {
   if (selected.includes(value)) return selected.filter(item => item !== value);
   if (selected.length >= limit) return selected;
   return [...selected, value];
+}
+
+function waitForPendingSync(ms: number): Promise<'pending'> {
+  return new Promise(resolve => {
+    window.setTimeout(() => resolve('pending'), ms);
+  });
 }
 
 const BioPromptPage = ({ user, onComplete }: BioPromptPageProps) => {
@@ -129,7 +138,22 @@ const BioPromptPage = ({ user, onComplete }: BioPromptPageProps) => {
     const updated = { ...user, ...userPayload, profileCompleteness: completeness } as User;
 
     try {
-      await setDoc(doc(db, 'users', user.id), firestorePayload, { merge: true });
+      saveCachedProfile(updated, true);
+      const syncPromise = setDoc(doc(db, 'users', user.id), firestorePayload, { merge: true });
+      const syncResult = await Promise.race([
+        syncPromise.then(() => 'synced' as const),
+        waitForPendingSync(FIRESTORE_SYNC_WAIT_MS),
+      ]);
+
+      if (syncResult === 'pending') {
+        onComplete(updated);
+        void syncPromise
+          .then(() => saveCachedProfile(updated, false))
+          .catch(error => console.error('Failed to sync onboarding profile in background', error));
+        return;
+      }
+
+      saveCachedProfile(updated, false);
       onComplete(updated);
     } catch (error) {
       console.error('Failed to save profile', error);

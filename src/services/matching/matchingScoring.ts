@@ -1,5 +1,22 @@
 import type { PreferenceProfile, Profile } from '@/types';
 
+const CAMPUS_LABELS_VI: Record<Profile['campus'], string> = {
+  HCM: 'TP.HCM',
+  Hanoi: 'Hà Nội',
+  Danang: 'Đà Nẵng',
+  Cantho: 'Cần Thơ',
+};
+
+function joinVi(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]} và ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')} và ${items[items.length - 1]}`;
+}
+
+export function campusLabelVi(campus: Profile['campus']): string {
+  return CAMPUS_LABELS_VI[campus] ?? campus;
+}
+
 export function scoreCandidate(
   self: Profile | null,
   candidate: Profile,
@@ -44,25 +61,25 @@ export function buildAiReason(self: Profile | null, candidate: Profile, score: n
   const reasons: string[] = [];
 
   if (shared.length > 0) {
-    reasons.push(`You both mention ${shared.slice(0, 2).join(' and ')}`);
+    reasons.push(`cả hai cùng nhắc đến ${joinVi(shared.slice(0, 2))}`);
   }
   if (self?.campus === candidate.campus) {
-    reasons.push(`same FPT ${candidate.campus} campus makes meeting easier`);
+    reasons.push(`cùng học FPT ${campusLabelVi(candidate.campus)} nên dễ hẹn gặp hơn`);
   }
   if (self?.major === candidate.major) {
-    reasons.push(`similar academic context in ${candidate.major}`);
+    reasons.push(`cùng bối cảnh ngành ${candidate.major}`);
   }
   const matchingGoals = candidate.datingGoals?.filter(goal => self?.datingGoals?.includes(goal)) ?? [];
   if (matchingGoals.length > 0) {
-    reasons.push(`similar intent around ${matchingGoals.slice(0, 2).join(' and ')}`);
+    reasons.push(`cùng hướng tới ${joinVi(matchingGoals.slice(0, 2))}`);
   }
   if (candidate.bio) {
-    reasons.push(`their bio suggests: "${candidate.bio.slice(0, 90)}${candidate.bio.length > 90 ? '...' : ''}"`);
+    reasons.push(`tín hiệu profile: ${candidate.bio.slice(0, 90)}${candidate.bio.length > 90 ? '...' : ''}`);
   }
 
   if (reasons.length === 0) {
-    reasons.push('their profile adds a different but compatible perspective to your current preference pattern');
+    reasons.push('profile của bạn ấy tạo một góc nhìn khác nhưng vẫn hợp với gu hiện tại của bạn');
   }
 
-  return `${compatibilityLabel(score)} because ${reasons.join(', ')}.`;
+  return `AI chọn ${candidate.name} vì ${reasons.join(', ')}.`;
 }

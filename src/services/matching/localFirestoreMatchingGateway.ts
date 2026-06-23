@@ -28,6 +28,7 @@ import type {
 } from '@/types';
 import type { MatchingGateway } from './types';
 import { buildAiReason, compatibilityLabel, scoreCandidate } from './matchingScoring';
+import { getCachedProfile, selectBestProfileSource } from '@/services/profileCacheService';
 
 const DAILY_PICK_LIMIT = 5;
 const MIN_DAILY_PICK_TARGET = 3;
@@ -51,10 +52,14 @@ export function pairKeyFor(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join('_');
 }
 
+function shouldRegenerateEmptyBatch(batch: DailyMatchBatch | null): batch is DailyMatchBatch {
+  return Boolean(batch && batch.matches.length === 0);
+}
+
 async function getCurrentProfile(uid: string): Promise<Profile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
-  if (!snap.exists()) return null;
-  return profileFromFirestore(snap.id, snap.data());
+  const remoteProfile = snap.exists() ? profileFromFirestore(snap.id, snap.data()) : null;
+  return selectBestProfileSource(remoteProfile, getCachedProfile(uid)) as Profile | null;
 }
 
 export async function getPreferenceProfileForUid(uid: string): Promise<PreferenceProfile> {
@@ -204,7 +209,7 @@ async function generateLocalDailyMatches(uid: string, date: string): Promise<voi
 
 async function ensureTodayBatch(uid: string, date: string): Promise<DailyMatchBatch> {
   const existing = await readDailyMatchBatch(uid, date);
-  if (existing) return existing;
+  if (existing && !shouldRegenerateEmptyBatch(existing)) return existing;
 
   await generateLocalDailyMatches(uid, date);
   const generated = await readDailyMatchBatch(uid, date);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compatibilityLabel, scoreCandidate } from './matchingScoring';
+import { buildAiReason, compatibilityLabel, scoreCandidate } from './matchingScoring';
 import { makeUser } from '@/test/factories';
 import type { PreferenceProfile, Profile } from '@/types';
 
@@ -42,5 +42,27 @@ describe('matching score helpers', () => {
     expect(compatibilityLabel(80)).toBe('Strong potential');
     expect(compatibilityLabel(70)).toBe('Worth exploring');
     expect(compatibilityLabel(50)).toBe('Fresh perspective');
+  });
+
+  it('builds Vietnamese reasons from the current user profile campus', () => {
+    const self = makeUser({
+      campus: 'Hanoi',
+      interests: ['Coffee', 'Startups', 'Music'],
+    }) as Profile;
+    const candidate = makeUser({
+      id: 'mock-linh',
+      name: 'Linh Tran',
+      campus: 'HCM',
+      interests: ['AI/ML', 'Coffee', 'Reading', 'Startups'],
+      bio: 'AI enthusiast who enjoys quiet coffee shops and building useful side projects.',
+    }) as Profile;
+
+    const reason = buildAiReason(self, candidate, 92);
+
+    expect(reason).toContain('AI chọn Linh Tran vì');
+    expect(reason).toContain('cả hai cùng nhắc đến Coffee và Startups');
+    expect(reason).toContain('tín hiệu profile: AI enthusiast');
+    expect(reason).not.toContain('same FPT');
+    expect(reason).not.toContain('cùng học FPT TP.HCM');
   });
 });

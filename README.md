@@ -14,44 +14,101 @@ F-Love is an AI-curated dating app for FPT students. Instead of swipe-based disc
 
 ## Tech Stack
 
-- React 18 + TypeScript
-- Vite
-- Tailwind CSS + shadcn/ui
-- Firebase Auth, Firestore, Storage
-- Capacitor Android
+- Expo React Native universal app in `apps/app`
+- Expo Router, React Query, i18next, lucide-react-native
+- Supabase Auth, Postgres, Storage, Realtime, Edge Functions
+- Shared TypeScript packages in `packages/core` and `packages/supabase`
+- Legacy Vite/Firebase/Capacitor app kept temporarily as reference only
 - i18next
 
 ## Architecture
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the product model, frontend modules, Firestore shape, matching lifecycle, feedback learning lifecycle, and cleanup notes.
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the product model, Supabase shape, Expo app structure, matching lifecycle, feedback learning lifecycle, and cleanup notes.
 
 ## Development
 
 ```bash
 npm install
-npm run dev
+npm run dev:app
 ```
+
+Use `npm run dev:legacy` only when comparing behavior against the temporary legacy web app.
+
+The primary app uses Supabase Cloud. Create `apps/app/.env.local` from `apps/app/.env.example`:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+The root `.env.local` is legacy Firebase config only and is ignored by git.
 
 ## Checks
 
 ```bash
-npx tsc --noEmit
-npm run build
+npm run test:core
+npm --workspace @flove/supabase run test
+npm --workspace @flove/app run typecheck
+npm run build:packages
 ```
 
-## AI Backend Mode
+## Supabase Backend
 
-The app includes a callable-functions adapter behind `aiBackendService`. By default, it uses the local Firestore fallback so the app can run without deployed functions.
+The backend contract lives in `supabase/`:
 
-Set this when Firebase Functions are deployed:
+- `supabase/migrations`: Postgres schema, RLS, storage policies, and RPC transactions.
+- `supabase/functions`: Edge Functions for AI Picks, feedback, mutual accept, preference chat, Blind Date, and reveal.
+- `supabase/seed.sql`: optional seed users/profiles for non-production environments.
+- `supabase/tests`: database contract tests when the Supabase CLI test runner is available.
+
+Cloud-first setup:
 
 ```bash
-VITE_AI_MATCH_BACKEND=functions
+supabase login
+SUPABASE_PROJECT_REF=your-project-ref npm run supabase:link
+npm run supabase:db:dry-run
+npm run supabase:db:push
+npm run supabase:functions:deploy
 ```
 
-Expected callable function names:
+Generate typed database bindings from the linked Supabase Cloud project:
 
-- `generateDailyMatches`
-- `submitMatchFeedback`
-- `acceptCuratedMatch`
-- `sendPreferenceChatMessage`
+```bash
+npm run supabase:types
+```
+
+Run database tests when the CLI environment supports it:
+
+```bash
+npm run supabase:test
+```
+
+Keep OpenAI keys and service-role keys only in Supabase secrets/Edge Function environment, never in `EXPO_PUBLIC_*`.
+
+Configure Supabase Auth redirect URLs in the Dashboard:
+
+- `flove://auth/callback`
+- `flove://auth/reset-password`
+- `https://your-vercel-domain/auth/callback`
+- `https://your-vercel-domain/auth/reset-password`
+
+## Vercel
+
+Deploy the Expo Web output from `apps/app`, not the legacy Vite app.
+
+Vercel project settings:
+
+- Root Directory: `apps/app`
+- Build Command: `npm run build:web`
+- Output Directory: `dist`
+- Environment Variables: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+
+The app includes `apps/app/vercel.json` so deep links and Expo Router routes rewrite back to `/`.
+
+## Seed Data
+
+AI Picks reads candidates from Supabase `public_profiles`. Optional seed profiles are defined in:
+
+```bash
+supabase/seed.sql
+```

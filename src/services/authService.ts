@@ -10,9 +10,15 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User, UserProfile } from '@/types';
-import { disableMockMode, enableMockMode, getMockUser, isMockMode, MOCK_USER } from './mockService';
+import { disableMockMode, enableMockMode, getMockUser, isMockMode } from './mockService';
 import { normalizeProfileText } from './profileService';
 import { appUserFromFirebase, userProfileFromFirestore } from './firestoreMappers';
+import {
+  getCachedProfile,
+  isPendingCachedProfile,
+  saveCachedProfile,
+  selectBestProfileSource,
+} from './profileCacheService';
 import { debugLog, debugWarn, elapsedMs, startTimer } from '@/lib/debugLog';
 
 export const FPT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
@@ -49,7 +55,9 @@ export const authService = {
       elapsedMs: elapsedMs(startedAt),
       hasProfile: Boolean(profile),
     });
-    return appUserFromFirebase(result.user, profile ?? {});
+    const user = appUserFromFirebase(result.user, profile ?? getCachedProfile(result.user.uid) ?? {});
+    if (profile && !isPendingCachedProfile(profile)) saveCachedProfile(user, false);
+    return user;
   },
 
   async logout(): Promise<void> {
@@ -78,7 +86,9 @@ export const authService = {
       elapsedMs: elapsedMs(startedAt),
       hasProfile: Boolean(profile),
     });
-    return appUserFromFirebase(fbUser, profile ?? {});
+    const user = appUserFromFirebase(fbUser, profile ?? getCachedProfile(fbUser.uid) ?? {});
+    if (profile && !isPendingCachedProfile(profile)) saveCachedProfile(user, false);
+    return user;
   },
 
   async signup(
@@ -111,13 +121,15 @@ export const authService = {
       createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, 'users', result.user.uid), userDoc);
-    return appUserFromFirebase(result.user, profile);
+    const user = appUserFromFirebase(result.user, profile);
+    saveCachedProfile(user, false);
+    return user;
   },
 
   async fetchProfile(uid: string): Promise<UserProfile | null> {
     if (isMockMode()) {
       return {
-        ...MOCK_USER,
+        ...getMockUser(),
         id: uid,
         createdAt: new Date(),
       };
@@ -130,8 +142,8 @@ export const authService = {
       elapsedMs: elapsedMs(startedAt),
       exists: snap.exists(),
     });
-    if (!snap.exists()) return null;
-    return userProfileFromFirestore(uid, snap.data());
+    const remoteProfile = snap.exists() ? userProfileFromFirestore(uid, snap.data()) : null;
+    return selectBestProfileSource(remoteProfile, getCachedProfile(uid)) as UserProfile | null;
   },
 
   onAuthChanged(callback: (user: User | null, status?: AuthChangedStatus) => void): () => void {
@@ -147,7 +159,8 @@ export const authService = {
         return;
       }
 
-      const basicUser = appUserFromFirebase(fbUser, basicFirebaseProfile(fbUser));
+      const cachedProfile = getCachedProfile(fbUser.uid);
+      const basicUser = appUserFromFirebase(fbUser, cachedProfile ?? basicFirebaseProfile(fbUser));
       debugLog('authService', 'onAuthStateChanged basic user', { userId: fbUser.uid });
       callback(basicUser, 'profileHydrating');
 
@@ -159,7 +172,9 @@ export const authService = {
             elapsedMs: elapsedMs(startedAt),
             hasProfile: Boolean(profile),
           });
-          callback(appUserFromFirebase(fbUser, profile ?? {}), 'authenticated');
+          const hydratedUser = appUserFromFirebase(fbUser, profile ?? cachedProfile ?? {});
+          if (profile && !isPendingCachedProfile(profile)) saveCachedProfile(hydratedUser, false);
+          callback(hydratedUser, 'authenticated');
         } catch (error) {
           // Firestore offline or error — still let user in with basic info
           debugWarn('authService', 'onAuthStateChanged profile hydrate failed', {
@@ -183,7 +198,8 @@ export const authService = {
       userId: fbUser.uid,
     });
 
-    const fallbackUser = appUserFromFirebase(fbUser, basicFirebaseProfile(fbUser));
+    const cachedProfile = getCachedProfile(fbUser.uid);
+    const fallbackUser = appUserFromFirebase(fbUser, cachedProfile ?? basicFirebaseProfile(fbUser));
 
     // Keep login responsive; Firestore can be slow on mobile/Tailscale.
     void (async () => {

@@ -19,7 +19,7 @@ export const functionsMatchingGateway: MatchingGateway = {
     const uid = currentUid();
     const date = localDateKey();
     const existing = await readDailyMatchBatch(uid, date);
-    if (existing) return existing;
+    if (existing && existing.matches.length > 0) return existing;
 
     await aiBackendService.generateDailyMatches(date);
     const generated = await readDailyMatchBatch(uid, date);

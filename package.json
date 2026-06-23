@@ -1,15 +1,34 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "flove",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
+    "dev:legacy": "vite",
+    "dev:app": "npm --workspace @flove/app run start",
     "build": "vite build",
+    "build:legacy": "vite build",
+    "build:app:web": "npm --workspace @flove/app run build:web",
+    "build:packages": "npm --workspaces --if-present run build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "lint:app": "npm --workspace @flove/app run lint",
     "preview": "vite preview",
+    "seed:mock-users": "node scripts/seed-mock-users.mjs",
+    "supabase:link": "test -n \"$SUPABASE_PROJECT_REF\" || (echo \"Set SUPABASE_PROJECT_REF first\" && exit 1); supabase link --project-ref \"$SUPABASE_PROJECT_REF\"",
+    "supabase:db:push": "supabase db push --linked",
+    "supabase:db:dry-run": "supabase db push --linked --dry-run",
+    "supabase:functions:deploy": "supabase functions deploy generate-daily-matches submit-match-feedback accept-curated-match send-preference-chat-message find-blind-date-partner request-reveal",
+    "supabase:types": "npm run supabase:types:cloud",
+    "supabase:types:cloud": "supabase gen types typescript --linked --schema public > packages/supabase/src/database.types.ts",
+    "supabase:test": "supabase test db",
     "test": "vitest run",
+    "test:core": "npm --workspace @flove/core run test",
     "test:watch": "vitest"
   },
   "dependencies": {

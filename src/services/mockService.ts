@@ -9,6 +9,7 @@ import {
   Profile,
   User,
 } from '@/types';
+import { buildAiReason } from './matching/matchingScoring';
 
 const MOCK_AUTH_KEY = 'flove-auth-mode';
 const USER_KEY = 'flove-user';
@@ -136,23 +137,18 @@ function pairKeyFor(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join('_');
 }
 
-function createMatch(profile: Profile, index: number, date: string): CuratedMatch {
+function createMatch(profile: Profile, index: number, date: string, self = getMockUser()): CuratedMatch {
   const score = [92, 84, 78, 71, 68][index] ?? 66;
-  const shared = profile.interests.filter(interest => MOCK_USER.interests.includes(interest));
-  const reasonParts = [
-    shared.length > 0 ? `shared interest in ${shared.slice(0, 2).join(' and ')}` : null,
-    profile.campus === MOCK_USER.campus ? `same FPT ${profile.campus} campus` : null,
-    `profile signal: ${profile.bio}`,
-  ].filter(Boolean);
+  const batchId = `${self.id}_${date}`;
 
   return {
     id: `mock-${date}-${profile.id}`,
-    batchId: `${MOCK_USER_ID}_${date}`,
-    userId: MOCK_USER_ID,
+    batchId,
+    userId: self.id,
     candidateId: profile.id,
     candidate: profile,
-    pairKey: pairKeyFor(MOCK_USER_ID, profile.id),
-    aiReason: `AI picked ${profile.name} because of ${reasonParts.join(', ')}.`,
+    pairKey: pairKeyFor(self.id, profile.id),
+    aiReason: buildAiReason(self, profile, score),
     compatibilityLabel: score >= 86 ? 'High intent fit' : score >= 76 ? 'Strong potential' : 'Worth exploring',
     compatibilityScore: score,
     status: 'pending',
@@ -162,24 +158,34 @@ function createMatch(profile: Profile, index: number, date: string): CuratedMatc
 }
 
 function getStoredBatch(date = todayKey()): DailyMatchBatch {
+  const self = getMockUser();
   const stored = readJson<DailyMatchBatch | null>(batchStorageKey(date), null);
   if (stored) {
-    return {
+    const batchId = `${self.id}_${date}`;
+    const hydrated = {
       ...stored,
+      id: batchId,
+      userId: self.id,
       createdAt: new Date(stored.createdAt),
       matches: stored.matches.map(match => ({
         ...match,
+        batchId,
+        userId: self.id,
+        pairKey: pairKeyFor(self.id, match.candidateId),
+        aiReason: buildAiReason(self, match.candidate, match.compatibilityScore),
         createdAt: new Date(match.createdAt),
         decidedAt: match.decidedAt ? new Date(match.decidedAt) : undefined,
       })),
     };
+    writeJson(batchStorageKey(date), hydrated);
+    return hydrated;
   }
 
   const batch: DailyMatchBatch = {
-    id: `${MOCK_USER_ID}_${date}`,
-    userId: MOCK_USER_ID,
+    id: `${self.id}_${date}`,
+    userId: self.id,
     date,
-    matches: MOCK_PROFILES.map((profile, index) => createMatch(profile, index, date)),
+    matches: MOCK_PROFILES.map((profile, index) => createMatch(profile, index, date, self)),
     createdAt: new Date(),
   };
   writeJson(batchStorageKey(date), batch);
@@ -238,11 +244,12 @@ export function isMockMode(): boolean {
 }
 
 export function enableMockMode(): User {
+  const user = getMockUser();
   if (storageAvailable()) {
     window.localStorage.setItem(MOCK_AUTH_KEY, MOCK_AUTH_VALUE);
-    window.localStorage.setItem(USER_KEY, JSON.stringify(MOCK_USER));
+    window.localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
-  return MOCK_USER;
+  return user;
 }
 
 export function disableMockMode(): void {
@@ -253,6 +260,10 @@ export function disableMockMode(): void {
 
 export function getMockUser(): User {
   return readJson<User>(USER_KEY, MOCK_USER);
+}
+
+export function saveMockUser(user: User): void {
+  writeJson(USER_KEY, user);
 }
 
 export const mockService = {
@@ -299,12 +310,13 @@ export const mockService = {
   },
 
   getPreferenceProfile(): PreferenceProfile {
+    const user = getMockUser();
     return readJson<PreferenceProfile>(preferenceStorageKey(), {
-      id: MOCK_USER_ID,
-      userId: MOCK_USER_ID,
-      summary: MOCK_USER.bio,
+      id: user.id,
+      userId: user.id,
+      summary: user.bio,
       hardFilters: ['FPT student'],
-      softPreferences: MOCK_USER.interests,
+      softPreferences: user.interests,
       feedbackSummary: [],
       updatedAt: new Date(),
     });

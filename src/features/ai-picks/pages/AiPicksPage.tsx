@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import CuratedMatchCard from '../components/CuratedMatchCard';
 import PreferenceChatPanel from '../components/PreferenceChatPanel';
-import { curatedMatchService } from '@/services/curatedMatchService';
 import type { MatchingGateway } from '@/services/curatedMatchService';
+import { createShowcaseAiPicksService } from '@/services/showcaseAiPicksService';
 import { getProfileReadiness } from '@/services/profileService';
 import { CuratedMatch, DailyMatchBatch, MatchFeedbackDecision, User } from '@/types';
 import ProfileCompletenessChecklist from '@/features/profile/components/ProfileCompletenessChecklist';
@@ -21,10 +21,15 @@ const AiPicksPage = ({
   user,
   onNavigateToMessages,
   onNavigateToProfile,
-  matchingGateway = curatedMatchService,
+  matchingGateway,
 }: AiPicksPageProps) => {
   const { t } = useTranslation('aiPicks');
   const readiness = useMemo(() => getProfileReadiness(user), [user]);
+  const isShowcaseMode = !matchingGateway;
+  const activeMatchingGateway = useMemo(
+    () => matchingGateway ?? createShowcaseAiPicksService(user),
+    [matchingGateway, user]
+  );
   const [batch, setBatch] = useState<DailyMatchBatch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [workingMatchId, setWorkingMatchId] = useState<string | null>(null);
@@ -32,7 +37,7 @@ const AiPicksPage = ({
   const [showPreferenceChat, setShowPreferenceChat] = useState(false);
 
   const loadMatches = useCallback(async () => {
-    if (!readiness.isComplete) {
+    if (!isShowcaseMode && !readiness.isComplete) {
       setBatch(null);
       setIsLoading(false);
       setNotice(null);
@@ -41,7 +46,7 @@ const AiPicksPage = ({
 
     setIsLoading(true);
     try {
-      const today = await matchingGateway.getTodayMatches();
+      const today = await activeMatchingGateway.getTodayMatches();
       setBatch(today);
     } catch (error) {
       console.error('Failed to load AI picks', error);
@@ -50,7 +55,7 @@ const AiPicksPage = ({
     } finally {
       setIsLoading(false);
     }
-  }, [matchingGateway, readiness.isComplete, t]);
+  }, [activeMatchingGateway, isShowcaseMode, readiness.isComplete, t]);
 
   useEffect(() => {
     loadMatches();
@@ -65,7 +70,7 @@ const AiPicksPage = ({
     setWorkingMatchId(matchId);
     setNotice(null);
     try {
-      const result = await matchingGateway.acceptMatch(matchId, tags, note);
+      const result = await activeMatchingGateway.acceptMatch(matchId, tags, note);
       setNotice(result.isMutual ? t('notice.mutual') : t('notice.waiting'));
       await loadMatches();
     } finally {
@@ -82,7 +87,7 @@ const AiPicksPage = ({
     setWorkingMatchId(matchId);
     setNotice(null);
     try {
-      await matchingGateway.submitFeedback(matchId, decision, tags, note);
+      await activeMatchingGateway.submitFeedback(matchId, decision, tags, note);
       setNotice(t(`notice.${decision}`));
       await loadMatches();
     } finally {
@@ -90,7 +95,7 @@ const AiPicksPage = ({
     }
   };
 
-  if (!readiness.isComplete) {
+  if (!isShowcaseMode && !readiness.isComplete) {
     return (
       <div className="h-full overflow-y-auto bg-background">
         <div className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border/60">
@@ -172,15 +177,17 @@ const AiPicksPage = ({
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowPreferenceChat(current => !current)}
-                className="rounded-xl"
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                {t('header.refine')}
-              </Button>
+              {!isShowcaseMode && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowPreferenceChat(current => !current)}
+                  className="rounded-xl"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  {t('header.refine')}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -202,16 +209,24 @@ const AiPicksPage = ({
           </div>
         )}
 
-        <div className="grid lg:grid-cols-[1fr_22rem] gap-5 items-start">
+        {isShowcaseMode && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm font-medium">
+            Demo mode: AI Picks đang dùng dữ liệu mẫu để showcase tỉ lệ match và lý do chọn.
+          </div>
+        )}
+
+        <div className={isShowcaseMode ? 'grid gap-5 items-start' : 'grid lg:grid-cols-[1fr_22rem] gap-5 items-start'}>
           <section className="space-y-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CalendarDays className="w-4 h-4 text-primary" />
-                {pendingCount > 0
+                {isShowcaseMode
+                  ? `Đang hiển thị ${batch?.matches.length ?? 0} AI Picks demo.`
+                  : pendingCount > 0
                   ? t('summary.pending', { count: pendingCount })
                   : t('summary.done')}
               </div>
-              {pendingCount === 0 && batch && batch.matches.length > 0 && (
+              {!isShowcaseMode && pendingCount === 0 && batch && batch.matches.length > 0 && (
                 <Button
                   type="button"
                   onClick={onNavigateToMessages}
@@ -233,10 +248,12 @@ const AiPicksPage = ({
                 {batch.matches.map((match: CuratedMatch) => (
                   <CuratedMatchCard
                     key={match.id}
+                    currentUser={user}
                     match={match}
                     isWorking={workingMatchId === match.id}
                     onAccept={handleAccept}
                     onFeedback={handleFeedback}
+                    showcaseOnly={isShowcaseMode}
                   />
                 ))}
               </div>
@@ -249,21 +266,25 @@ const AiPicksPage = ({
                 <p className="text-sm text-muted-foreground max-w-md mt-2">
                   {t('empty.description')}
                 </p>
-                <Button
-                  type="button"
-                  onClick={() => setShowPreferenceChat(true)}
-                  className="mt-5 rounded-xl gradient-primary text-primary-foreground"
-                >
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  {t('empty.refine')}
-                </Button>
+                {!isShowcaseMode && (
+                  <Button
+                    type="button"
+                    onClick={() => setShowPreferenceChat(true)}
+                    className="mt-5 rounded-xl gradient-primary text-primary-foreground"
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    {t('empty.refine')}
+                  </Button>
+                )}
               </div>
             )}
           </section>
 
-          <div className={showPreferenceChat ? 'block' : 'hidden lg:block'}>
-            <PreferenceChatPanel />
-          </div>
+          {!isShowcaseMode && (
+            <div className={showPreferenceChat ? 'block' : 'hidden lg:block'}>
+              <PreferenceChatPanel />
+            </div>
+          )}
         </div>
       </main>
     </div>

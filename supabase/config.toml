@@ -1,0 +1,46 @@
+project_id = "flove"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "flove://auth/callback"
+additional_redirect_urls = [
+  "flove://auth/callback",
+  "flove://auth/reset-password",
+  "https://flove.app/auth/callback",
+  "https://flove.app/auth/reset-password"
+]
+
+[storage]
+enabled = true
+
+[functions.generate-daily-matches]
+verify_jwt = true
+
+[functions.submit-match-feedback]
+verify_jwt = true
+
+[functions.accept-curated-match]
+verify_jwt = true
+
+[functions.send-preference-chat-message]
+verify_jwt = true
+
+[functions.find-blind-date-partner]
+verify_jwt = true
+
+[functions.request-reveal]
+verify_jwt = true

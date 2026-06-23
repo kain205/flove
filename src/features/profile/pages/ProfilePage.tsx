@@ -8,6 +8,8 @@ import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User } from '@/types';
 import { useAuth } from '@/features/auth/useAuth';
+import { isMockMode, saveMockUser } from '@/services/mockService';
+import { saveCachedProfile } from '@/services/profileCacheService';
 import { debugLog, debugWarn, elapsedMs, startTimer } from '@/lib/debugLog';
 import {
   buildProfileSavePayload,
@@ -29,18 +31,26 @@ interface ProfilePageProps {
   onNavigateToAiPicks?: () => void;
 }
 
-const SAVE_TIMEOUT_MS = 10000;
+const FIRESTORE_SYNC_WAIT_MS = 10000;
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error(message));
-    }, timeoutMs);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Không đọc được ảnh.'));
+    };
+    reader.onerror = () => reject(new Error('Không đọc được ảnh.'));
+    reader.readAsDataURL(file);
+  });
+}
 
-    promise
-      .then(resolve)
-      .catch(reject)
-      .finally(() => window.clearTimeout(timeout));
+function waitForPendingSync(ms: number): Promise<'pending'> {
+  return new Promise(resolve => {
+    window.setTimeout(() => resolve('pending'), ms);
   });
 }
 
@@ -63,6 +73,7 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveHint, setSaveHint] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   const draftUser = {
@@ -115,11 +126,20 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
     setIsUploadingPhoto(true);
     setError(null);
     try {
+      if (isMockMode()) {
+        const avatarUrl = await readFileAsDataUrl(file);
+        const updated = { ...user, avatar: avatarUrl };
+        saveMockUser(updated);
+        onUserUpdate(updated);
+        return;
+      }
+
       const storageRef = ref(storage, `avatars/${user.id}`);
       await uploadBytes(storageRef, file);
       const avatarUrl = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, 'users', user.id), { avatar: avatarUrl, updatedAt: serverTimestamp() });
       const updated = { ...user, avatar: avatarUrl };
+      await updateDoc(doc(db, 'users', user.id), { avatar: avatarUrl, updatedAt: serverTimestamp() });
+      saveCachedProfile(updated, false);
       onUserUpdate(updated);
     } catch (error) {
       console.error('Failed to upload profile photo', error);
@@ -134,6 +154,7 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
 
     setIsSaving(true);
     setError(null);
+    setSaveHint(null);
     setSaved(false);
     const updates = buildProfileSavePayload(user, {
       name,
@@ -162,16 +183,58 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
         profileCompleteness: updates.profileCompleteness,
         payloadKeys: Object.keys(updates),
       });
-      await withTimeout(
-        setDoc(doc(db, 'users', user.id), { ...updates, updatedAt: serverTimestamp() }, { merge: true }),
-        SAVE_TIMEOUT_MS,
-        'Lưu profile đang mất quá lâu. Kiểm tra mạng/Firebase rồi thử lại.'
-      );
+
+      onUserUpdate(updated);
+      saveCachedProfile(updated, !isMockMode());
+
+      if (isMockMode()) {
+        saveMockUser(updated);
+      } else {
+        const syncPromise = setDoc(
+          doc(db, 'users', user.id),
+          { ...updates, updatedAt: serverTimestamp() },
+          { merge: true }
+        );
+        const syncResult = await Promise.race([
+          syncPromise.then(() => 'synced' as const),
+          waitForPendingSync(FIRESTORE_SYNC_WAIT_MS),
+        ]);
+
+        if (syncResult === 'pending') {
+          setSaveHint('Đã cập nhật trong app. Firebase vẫn đang đồng bộ nền; nếu reload ngay có thể thấy dữ liệu cũ.');
+          setSaved(true);
+          void syncPromise
+            .then(() => {
+              debugLog('profile', 'background save done', {
+                elapsedMs: elapsedMs(startedAt),
+                userId: user.id,
+              });
+              setSaveHint(null);
+              saveCachedProfile(updated, false);
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            })
+            .catch(error => {
+              debugWarn('profile', 'background save failed', {
+                userId: user.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              console.error('Failed to sync profile in background', error);
+              setSaveHint(null);
+              setError(
+                error instanceof Error
+                  ? `Profile đã cập nhật trong app nhưng Firebase chưa nhận: ${error.message}`
+                  : 'Profile đã cập nhật trong app nhưng Firebase chưa nhận.'
+              );
+            });
+          return;
+        }
+      }
       debugLog('profile', 'save done', {
         elapsedMs: elapsedMs(startedAt),
         userId: user.id,
       });
-      onUserUpdate(updated);
+      setSaveHint(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
@@ -180,7 +243,12 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
         error: error instanceof Error ? error.message : String(error),
       });
       console.error('Failed to save profile', error);
-      setError(error instanceof Error ? error.message : 'Không lưu được profile.');
+      setSaveHint(null);
+      setError(
+        error instanceof Error
+          ? `Profile đã cập nhật trong app nhưng Firebase chưa nhận: ${error.message}`
+          : 'Profile đã cập nhật trong app nhưng Firebase chưa nhận.'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -418,6 +486,12 @@ const ProfilePage = ({ user, onUserUpdate, onNavigateToAiPicks }: ProfilePagePro
         {error && (
           <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
             {error}
+          </div>
+        )}
+
+        {saveHint && !error && (
+          <div className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm font-medium text-primary">
+            {saveHint}
           </div>
         )}
 

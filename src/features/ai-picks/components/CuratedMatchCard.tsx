@@ -13,9 +13,11 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { CuratedMatch, MatchFeedbackDecision } from '@/types';
+import { buildAiReason } from '@/services/matching/matchingScoring';
+import { CuratedMatch, MatchFeedbackDecision, User } from '@/types';
 
 interface CuratedMatchCardProps {
+  currentUser: User;
   match: CuratedMatch;
   isWorking: boolean;
   onAccept: (matchId: string, tags: string[], note?: string) => void;
@@ -25,6 +27,7 @@ interface CuratedMatchCardProps {
     tags: string[],
     note?: string
   ) => void;
+  showcaseOnly?: boolean;
 }
 
 const TAG_KEYS = ['vibe', 'campus', 'interests', 'type', 'pace'] as const;
@@ -39,16 +42,22 @@ const statusClasses: Record<CuratedMatch['status'], string> = {
 };
 
 const CuratedMatchCard = ({
+  currentUser,
   match,
   isWorking,
   onAccept,
   onFeedback,
+  showcaseOnly = false,
 }: CuratedMatchCardProps) => {
   const { t } = useTranslation('aiPicks');
   const [selectedTags, setSelectedTags] = useState<string[]>(match.feedbackTags ?? []);
   const [note, setNote] = useState(match.feedbackNote ?? '');
   const isResolved = match.status !== 'pending';
   const candidateInterests = match.candidate.interests ?? [];
+  const aiReason = useMemo(
+    () => match.aiReason || buildAiReason(currentUser, match.candidate, match.compatibilityScore),
+    [currentUser, match.aiReason, match.candidate, match.compatibilityScore]
+  );
 
   const tagOptions = useMemo(
     () => TAG_KEYS.map(key => ({
@@ -106,108 +115,126 @@ const CuratedMatchCard = ({
       </div>
 
       <div className="p-5 space-y-5">
-        <div className="flex items-center justify-between gap-3">
-          <Badge variant="outline" className={statusClasses[match.status]}>
-            {t(`status.${match.status}`)}
-          </Badge>
-          <span className="text-sm font-medium text-primary">{match.compatibilityLabel}</span>
-        </div>
+        {showcaseOnly ? (
+          <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Tỉ lệ match
+              </p>
+              <p className="text-sm font-medium text-primary mt-1">{match.compatibilityLabel}</p>
+            </div>
+            <div className="text-4xl font-bold text-primary">{match.compatibilityScore}%</div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <Badge variant="outline" className={statusClasses[match.status]}>
+              {t(`status.${match.status}`)}
+            </Badge>
+            <span className="text-sm font-medium text-primary">{match.compatibilityLabel}</span>
+          </div>
+        )}
 
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <Sparkles className="w-4 h-4 text-primary" />
-            {t('card.reasonTitle')}
+            {showcaseOnly ? 'Lý do chọn' : t('card.reasonTitle')}
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {match.aiReason}
+            {aiReason}
           </p>
         </div>
 
-        {match.candidate.bio && (
+        {!showcaseOnly && match.candidate.bio && (
           <p className="text-sm leading-relaxed text-foreground/80">
             {match.candidate.bio}
           </p>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {candidateInterests.slice(0, 6).map(interest => (
-            <span
-              key={interest}
-              className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
-            >
-              {interest}
-            </span>
-          ))}
-        </div>
-
-        <div className="space-y-3 pt-1">
-          <p className="text-sm font-semibold text-foreground">{t('card.feedbackPrompt')}</p>
+        {!showcaseOnly && (
           <div className="flex flex-wrap gap-2">
-            {tagOptions.map(tag => {
-              const active = selectedTags.includes(tag.label);
-              return (
-                <button
-                  key={tag.key}
-                  type="button"
-                  onClick={() => toggleTag(tag.label)}
-                  disabled={isResolved || isWorking}
-                  className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
-                    active
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background text-muted-foreground border-border hover:text-foreground'
-                  }`}
-                >
-                  {tag.label}
-                </button>
-              );
-            })}
+            {candidateInterests.slice(0, 6).map(interest => (
+              <span
+                key={interest}
+                className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
+              >
+                {interest}
+              </span>
+            ))}
           </div>
-          <Textarea
-            value={note}
-            onChange={event => setNote(event.target.value)}
-            placeholder={t('card.notePlaceholder')}
-            disabled={isResolved || isWorking}
-            className="min-h-20 rounded-xl resize-none"
-          />
-        </div>
+        )}
 
-        <div className="grid grid-cols-3 gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isResolved || isWorking}
-            onClick={() => onFeedback(match.id, 'skipped', selectedTags, note)}
-            className="rounded-xl"
-          >
-            <Clock className="w-4 h-4 mr-1" />
-            {t('card.skip')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isResolved || isWorking || selectedTags.length === 0}
-            onClick={() => onFeedback(match.id, 'declined', selectedTags, note)}
-            className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10"
-          >
-            <X className="w-4 h-4 mr-1" />
-            {t('card.decline')}
-          </Button>
-          <Button
-            type="button"
-            disabled={isResolved || isWorking}
-            onClick={() => onAccept(match.id, selectedTags, note)}
-            className="rounded-xl gradient-primary text-primary-foreground"
-          >
-            {match.status === 'matched' ? (
-              <Check className="w-4 h-4 mr-1" />
-            ) : (
-              <Heart className="w-4 h-4 mr-1" />
-            )}
-            {t('card.accept')}
-          </Button>
-        </div>
+        {!showcaseOnly && (
+          <div className="space-y-3 pt-1">
+            <p className="text-sm font-semibold text-foreground">{t('card.feedbackPrompt')}</p>
+            <div className="flex flex-wrap gap-2">
+              {tagOptions.map(tag => {
+                const active = selectedTags.includes(tag.label);
+                return (
+                  <button
+                    key={tag.key}
+                    type="button"
+                    onClick={() => toggleTag(tag.label)}
+                    disabled={isResolved || isWorking}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                      active
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-muted-foreground border-border hover:text-foreground'
+                    }`}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
+            </div>
+            <Textarea
+              value={note}
+              onChange={event => setNote(event.target.value)}
+              placeholder={t('card.notePlaceholder')}
+              disabled={isResolved || isWorking}
+              className="min-h-20 rounded-xl resize-none"
+            />
+          </div>
+        )}
 
-        {!isResolved && (
+        {!showcaseOnly && (
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isResolved || isWorking}
+              onClick={() => onFeedback(match.id, 'skipped', selectedTags, note)}
+              className="rounded-xl"
+            >
+              <Clock className="w-4 h-4 mr-1" />
+              {t('card.skip')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isResolved || isWorking || selectedTags.length === 0}
+              onClick={() => onFeedback(match.id, 'declined', selectedTags, note)}
+              className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10"
+            >
+              <X className="w-4 h-4 mr-1" />
+              {t('card.decline')}
+            </Button>
+            <Button
+              type="button"
+              disabled={isResolved || isWorking}
+              onClick={() => onAccept(match.id, selectedTags, note)}
+              className="rounded-xl gradient-primary text-primary-foreground"
+            >
+              {match.status === 'matched' ? (
+                <Check className="w-4 h-4 mr-1" />
+              ) : (
+                <Heart className="w-4 h-4 mr-1" />
+              )}
+              {t('card.accept')}
+            </Button>
+          </div>
+        )}
+
+        {!showcaseOnly && !isResolved && (
           <button
             type="button"
             disabled={isWorking}
