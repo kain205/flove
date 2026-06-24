@@ -37,6 +37,7 @@ apps/*/.env.*
 .shared
 .claude/
 .firebase/
+.vercel/
 supabase/.temp/
 estimate.txt
 
@@ -45,3 +46,4 @@ estimate.txt
 *.dc.html
 *-handoff.zip
 *-handoff.zip:Zone.Identifier
+.vercel
