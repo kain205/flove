@@ -4,12 +4,73 @@ export const MAJORS = ['SE', 'AI', 'Biz', 'Design', 'Marketing'] as const;
 export type Campus = (typeof CAMPUSES)[number];
 export type Major = (typeof MAJORS)[number];
 
+export const CAMPUS_LABELS_VI: Record<Campus, string> = {
+  HCM: 'FPT University TP. Hồ Chí Minh',
+  Hanoi: 'FPT University Hà Nội',
+  Danang: 'FPT University Đà Nẵng',
+  Cantho: 'FPT University Cần Thơ',
+};
+
+export const MAJOR_LABELS_VI: Record<Major, string> = {
+  SE: 'Công nghệ phần mềm',
+  AI: 'Trí tuệ nhân tạo',
+  Biz: 'Kinh doanh',
+  Design: 'Thiết kế',
+  Marketing: 'Marketing',
+};
+
+export function campusLabelVi(campus: Campus): string {
+  return CAMPUS_LABELS_VI[campus] ?? campus;
+}
+
+export function majorLabelVi(major: Major): string {
+  return MAJOR_LABELS_VI[major] ?? major;
+}
+
 export interface ProfileText {
   bio: string;
+  school?: string;
+  majorLabel?: string;
   weekendStyle?: string;
   conversationStyle?: string;
   memorableThing?: string;
   relationshipIntent?: string;
+}
+
+export interface OnboardingAnswer {
+  questionId: string;
+  value: string | string[];
+  answeredAt: string;
+}
+
+export interface OnboardingSignals {
+  intents: string[];
+  values: Record<string, number>;
+  interests: string[];
+  lifestyle: Record<string, number>;
+  communication: Record<string, number>;
+  personality: Record<string, number>;
+  dealbreakers: string[];
+  preferredPartnerTraits: string[];
+  vibeTags: string[];
+  confidence: number;
+  version: 'onboarding_v1';
+  embeddings?: {
+    interests?: number[];
+    values?: number[];
+    goals?: number[];
+    communication?: number[];
+    personality?: number[];
+    preferredPartner?: number[];
+  };
+}
+
+export interface ProfileAiSignals {
+  onboarding?: {
+    rawAnswers: OnboardingAnswer[];
+    extractedTraits: OnboardingSignals;
+    completedAt?: string;
+  };
 }
 
 export interface UserProfile {
@@ -28,6 +89,17 @@ export interface UserProfile {
   profileText: ProfileText;
   profileCompleteness: number;
   onboardingSource: 'manual' | 'sample_autofill';
+  aiSignals?: ProfileAiSignals;
+  // Notebook AI onboarding fields (optional for backward compatibility).
+  gender?: Gender;
+  genderText?: string;
+  lookingForGender?: string[];
+  heightCm?: number | null;
+  agePref?: { min?: number | null; max?: number | null };
+  appearancePreference?: AppearancePreference;
+  dealbreakers?: Dealbreaker[];
+  aiProfileAnalysis?: AIProfileAnalysis | null;
+  profileConfirmed?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -46,6 +118,8 @@ export interface PublicProfile {
   preferredVibes: string[];
   profileText: ProfileText;
   profileCompleteness: number;
+  gender?: Gender;
+  heightCm?: number | null;
 }
 
 export interface PreferenceProfile {
@@ -69,6 +143,7 @@ export interface CuratedMatch {
   candidate: PublicProfile;
   pairKey: string;
   aiReason: string;
+  suggestedOpener?: string;
   compatibilityLabel: string;
   compatibilityScore: number;
   status: CuratedMatchStatus;
@@ -102,3 +177,101 @@ export interface Message {
   createdAt: Date;
   isRead: boolean;
 }
+
+// --- Notebook AI onboarding -------------------------------------------------
+
+export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_show';
+
+/** Discovery tokens stored in `looking_for_gender`. */
+export type LookingForToken = 'male' | 'female' | 'everyone' | 'depends';
+
+export type PreferenceImportance = 'none' | 'soft' | 'medium' | 'hard';
+export type DealbreakerSeverity = 'soft' | 'medium' | 'hard';
+
+export interface Dealbreaker {
+  trait: string;
+  severity: DealbreakerSeverity;
+  reason?: string;
+}
+
+export interface HeightPreference {
+  importance: PreferenceImportance;
+  minHeightCm?: number;
+  maxHeightCm?: number;
+  prefersTallerThanSelf?: boolean;
+  prefersShorterThanSelf?: boolean;
+}
+
+export interface AppearancePreference {
+  importance: PreferenceImportance;
+  preferredStyleTags: string[];
+  preferredAppearanceVibeTags: string[];
+  heightPreference: HeightPreference;
+  physicalDealbreakers: Dealbreaker[];
+}
+
+/** Numeric communication style signals, each roughly 0..1. */
+export interface CommunicationStyle {
+  deepTalk: number;
+  humor: number;
+  textingFrequency: number;
+  directness: number;
+  slowBurn: number;
+  initiatesConversation: number;
+  prefersInPersonSoon: number;
+  emotionalExpression: number;
+}
+
+export interface MatchingSignals {
+  intents: string[];
+  intentClarity: number;
+  seriousnessLevel: number;
+  relationshipPace: string;
+  selfTraits: string[];
+  interests: string[];
+  vibeTags: string[];
+  values: Record<string, number>;
+  personality: Record<string, number>;
+  lifestyle: Record<string, number>;
+  preferredPartnerTraits: string[];
+  appearancePreference: AppearancePreference;
+  communication: CommunicationStyle;
+  dealbreakers: Dealbreaker[];
+  confidence: number;
+}
+
+export interface AIProfilePublicFields {
+  displayName: string;
+  age: number;
+  gender?: string;
+  school: string;
+  major: string;
+  heightCm?: number;
+  bio: string;
+  vibeSummary: string;
+  conversationHooks: string[];
+}
+
+export interface AIProfileReview {
+  selfSummary: string;
+  seekingSummary: string;
+  idealMatchSummary: string;
+  avoidSummary: string;
+  suggestedBio: string;
+}
+
+/** Full structured output of the one-shot onboarding LLM analysis. */
+export interface AIProfileAnalysis {
+  publicProfile: AIProfilePublicFields;
+  matchingSignals: MatchingSignals;
+  aiReview: AIProfileReview;
+}
+
+/** Default empty preference object — convenient for building partial analyses. */
+export const EMPTY_APPEARANCE_PREFERENCE: AppearancePreference = {
+  importance: 'none',
+  preferredStyleTags: [],
+  preferredAppearanceVibeTags: [],
+  heightPreference: { importance: 'none' },
+  physicalDealbreakers: [],
+};

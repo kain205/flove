@@ -1,5 +1,26 @@
-import type { MatchFeedbackDecision } from '@flove/core';
+import type { AIProfileAnalysis, MatchFeedbackDecision } from '@flove/core';
 import type { FloveSupabaseClient } from './client';
+
+export interface OnboardingAnswerInput {
+  questionId: string;
+  value: string | string[];
+}
+
+export interface OnboardingBasicInput {
+  name?: string;
+  age?: number;
+  gender?: string;
+  genderText?: string;
+  lookingForGender?: string[];
+  heightCm?: number | null;
+  school?: string;
+  majorLabel?: string;
+  major?: string;
+  campus?: string;
+  avatarUrl?: string;
+  agePrefMin?: number | null;
+  agePrefMax?: number | null;
+}
 
 export async function generateDailyMatches(client: FloveSupabaseClient, date?: string) {
   const { data, error } = await client.functions.invoke('generate-daily-matches', {
@@ -7,6 +28,30 @@ export async function generateDailyMatches(client: FloveSupabaseClient, date?: s
   });
   if (error) throw error;
   return data as { ok: true; batchId: string; generatedBy?: string; matchCount?: number };
+}
+
+/** Runs the one-shot LLM profile analysis (no DB write) for the review screen. */
+export async function analyzeOnboardingProfile(
+  client: FloveSupabaseClient,
+  input: { answers: OnboardingAnswerInput[]; basic: OnboardingBasicInput }
+) {
+  const { data, error } = await client.functions.invoke('analyze-onboarding-profile', {
+    body: input,
+  });
+  if (error) throw error;
+  return data as { analysis: AIProfileAnalysis; generatedBy: string };
+}
+
+/** Persists the confirmed profile + embeddings and unlocks AI Picks. */
+export async function confirmOnboardingProfile(
+  client: FloveSupabaseClient,
+  input: { analysis: AIProfileAnalysis; basic: OnboardingBasicInput; answers: OnboardingAnswerInput[] }
+) {
+  const { data, error } = await client.functions.invoke('confirm-onboarding-profile', {
+    body: input,
+  });
+  if (error) throw error;
+  return data as { ok: true; profileCompleteness: number; embedded: boolean };
 }
 
 export async function submitMatchFeedback(

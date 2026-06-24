@@ -1,39 +1,67 @@
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
-import { colors } from '@/theme';
+import { colors, radii } from '@/theme';
 
 interface TextFieldProps extends TextInputProps {
-  label: string;
+  label?: string;
+  icon?: ReactNode;
+  helperText?: string;
 }
 
-export function TextField({ label, style, ...props }: TextFieldProps) {
+export function TextField({ label, icon, helperText, style, multiline, ...props }: TextFieldProps) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        placeholderTextColor={colors.muted}
-        style={[styles.input, style]}
-        {...props}
-      />
+      {label ? <Text style={styles.label}>{label}</Text> : null}
+      <View style={[styles.field, multiline && styles.fieldMultiline]}>
+        {icon ? <View style={styles.icon}>{icon}</View> : null}
+        <TextInput
+          placeholderTextColor={colors.mutedLight}
+          multiline={multiline}
+          style={[styles.input, multiline && styles.inputMultiline, style]}
+          {...props}
+        />
+      </View>
+      {helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: 6,
-  },
+  wrap: { gap: 8 },
   label: {
-    color: colors.text,
+    color: colors.textSoft,
     fontWeight: '700',
+    fontSize: 13,
   },
-  input: {
-    minHeight: 46,
-    borderRadius: 8,
-    borderWidth: 1,
+  helper: {
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+  },
+  fieldMultiline: {
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+  },
+  icon: { paddingTop: 1 },
+  input: {
+    flex: 1,
     color: colors.text,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    fontSize: 15,
+    paddingVertical: 14,
+  },
+  inputMultiline: {
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
 });

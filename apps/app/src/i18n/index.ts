@@ -10,10 +10,10 @@ void i18n.use(initReactI18next).init({
       common: {
         aiPicks: 'AI Picks',
         blindDate: 'Blind Date',
-        messages: 'Tin nhan',
-        profile: 'Ho so',
-        login: 'Dang nhap',
-        signup: 'Dang ky',
+        messages: 'Tin nhắn',
+        profile: 'Hồ sơ',
+        login: 'Đăng nhập',
+        signup: 'Đăng ký',
       },
     },
     en: {

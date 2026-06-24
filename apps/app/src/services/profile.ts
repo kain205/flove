@@ -31,6 +31,7 @@ export async function saveProfile(profile: Partial<UserProfile>) {
       bio: profileText.bio,
     }),
     onboarding_source: profile.onboardingSource ?? 'manual',
+    ai_signals: profile.aiSignals ?? {},
   };
 
   const { error } = await (supabase.from('profiles') as any).upsert(payload);

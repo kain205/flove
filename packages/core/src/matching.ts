@@ -18,8 +18,8 @@ export function pairKeyFor(uidA: string, uidB: string): string {
 
 function joinVi(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
-  if (items.length === 2) return `${items[0]} va ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')} va ${items[items.length - 1]}`;
+  if (items.length === 2) return `${items[0]} và ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')} và ${items[items.length - 1]}`;
 }
 
 export function scoreCandidate(
@@ -55,20 +55,20 @@ export function scoreCandidate(
 }
 
 export function compatibilityLabel(score: number): string {
-  if (score >= 86) return 'High intent fit';
-  if (score >= 74) return 'Strong potential';
-  if (score >= 64) return 'Worth exploring';
-  return 'Fresh perspective';
+  if (score >= 86) return 'Rất hợp về ý định';
+  if (score >= 74) return 'Tiềm năng mạnh';
+  if (score >= 64) return 'Đáng khám phá';
+  return 'Góc nhìn mới';
 }
 
 export function buildFallbackReason(self: PublicProfile | null, candidate: PublicProfile): string {
   const shared = candidate.interests.filter(interest => self?.interests.includes(interest));
   const reasons: string[] = [];
-  if (shared.length > 0) reasons.push(`ca hai cung quan tam ${joinVi(shared.slice(0, 2))}`);
-  if (self?.campus === candidate.campus) reasons.push(`cung campus ${candidate.campus}`);
-  if (self?.major === candidate.major) reasons.push(`cung nganh ${candidate.major}`);
+  if (shared.length > 0) reasons.push(`cả hai cùng quan tâm ${joinVi(shared.slice(0, 2))}`);
+  if (self?.campus === candidate.campus && candidate.profileText.school) reasons.push(`cùng học tại ${candidate.profileText.school}`);
+  if (self?.major === candidate.major && candidate.profileText.majorLabel) reasons.push(`cùng ngành ${candidate.profileText.majorLabel}`);
   const goals = candidate.datingGoals.filter(goal => self?.datingGoals.includes(goal));
-  if (goals.length > 0) reasons.push(`cung huong toi ${joinVi(goals.slice(0, 2))}`);
-  if (candidate.bio) reasons.push(`profile cua ban ay noi ve: ${candidate.bio.slice(0, 90)}`);
-  return `AI chon ${candidate.name} vi ${reasons.join(', ') || 'profile tao mot goc nhin moi nhung van hop voi tin hieu hien tai cua ban'}.`;
+  if (goals.length > 0) reasons.push(`cùng hướng tới ${joinVi(goals.slice(0, 2))}`);
+  if (candidate.bio) reasons.push(`hồ sơ của bạn ấy nói về: ${candidate.bio.slice(0, 90)}`);
+  return `AI chọn ${candidate.name} vì ${reasons.join(', ') || 'hồ sơ tạo một góc nhìn mới nhưng vẫn hợp với tín hiệu hiện tại của bạn'}.`;
 }

@@ -1,0 +1,167 @@
+// Mock candidate dataset for the notebook AI matching pipeline.
+// Each entry carries the structured signals the matcher reads, plus short free texts used to
+// generate embeddings. Genders / looking-for are varied so mutual discovery has real candidates.
+
+export const DEFAULT_PASSWORD = 'FloveMock123!';
+
+const emptyAppearance = {
+  importance: 'none',
+  preferredStyleTags: [],
+  preferredAppearanceVibeTags: [],
+  heightPreference: { importance: 'none' },
+  physicalDealbreakers: [],
+};
+
+/** Compact mock definitions; `buildProfile` expands them into the full DB shape. */
+export const mockProfiles = [
+  {
+    email: 'linh.tran@fpt.edu.vn', name: 'Linh Tran', age: 20, gender: 'female', lookingFor: ['male'], heightCm: 162,
+    campus: 'HCM', major: 'AI', majorLabel: 'Trí tuệ nhân tạo (AI)',
+    bio: 'AI enthusiast thích quán cà phê yên tĩnh và làm side project có ích.',
+    interests: ['AI/ML', 'Coffee', 'Reading', 'Startups'],
+    intents: ['serious_relationship', 'study_partner'], seriousness: 0.8, pace: 'slow',
+    selfTraits: ['curious', 'thoughtful'], vibeTags: ['Curious', 'Calm'],
+    values: { ambition: 0.8, curiosity: 0.7 }, personality: { curious: 0.7, calm: 0.6 },
+    lifestyle: { student_life: 0.7, chill: 0.6 }, communication: { deepTalk: 0.9, humor: 0.4, textingFrequency: 0.5, directness: 0.5, slowBurn: 0.8, initiatesConversation: 0.4, prefersInPersonSoon: 0.3, emotionalExpression: 0.6 },
+    preferredPartnerTraits: ['goal_oriented', 'good_listener'], appearanceImportance: 'soft', dealbreakers: [{ trait: 'dishonesty', severity: 'hard' }, { trait: 'superficial', severity: 'medium' }],
+    text: { self: 'Mình hơi hướng nội, thích đọc sách, cà phê yên tĩnh và trò chuyện sâu về công nghệ.', need: 'Mình tìm người nghiêm túc, có thể bắt đầu nhẹ nhàng rồi tìm hiểu lâu dài; thích người cùng học/làm dự án.', attraction: 'Mình thích người có định hướng, biết lắng nghe, nói chuyện có chiều sâu.', communication: 'Mình thích nhắn ít nhưng sâu, không áp lực rep nhanh, đôi khi thích gọi điện.' },
+  },
+  {
+    email: 'mai.pham@fpt.edu.vn', name: 'Mai Pham', age: 21, gender: 'female', lookingFor: ['everyone'], heightCm: 165,
+    campus: 'HCM', major: 'Design', majorLabel: 'Thiết kế đồ họa',
+    bio: 'Sinh viên thiết kế, lang thang bảo tàng và làm playlist.',
+    interests: ['Design', 'Music', 'Art', 'Travel'],
+    intents: ['gentle_dating', 'shared_interests'], seriousness: 0.5, pace: 'normal',
+    selfTraits: ['creative', 'energetic'], vibeTags: ['Creative', 'Energetic'],
+    values: { creativity: 0.9, warmth: 0.6 }, personality: { creative: 0.8, curious: 0.5 },
+    lifestyle: { slow_date: 0.6, party: 0.4 }, communication: { deepTalk: 0.5, humor: 0.8, textingFrequency: 0.8, directness: 0.6, slowBurn: 0.3, initiatesConversation: 0.7, prefersInPersonSoon: 0.6, emotionalExpression: 0.7 },
+    preferredPartnerTraits: ['creative', 'emotionally_available'], appearanceImportance: 'medium', dealbreakers: [{ trait: 'poor_boundaries', severity: 'hard' }],
+    text: { self: 'Mình năng động, sáng tạo, thích âm nhạc, nghệ thuật và đi du lịch ngẫu hứng.', need: 'Mình thích hẹn hò nhẹ nhàng, gặp người cùng gu nghệ thuật để cùng đi chơi.', attraction: 'Mình bị thu hút bởi người sáng tạo, ấm áp, biết thể hiện cảm xúc.', communication: 'Mình nhắn tin nhiều, thích vui vẻ meme, hay chủ động mở lời và muốn gặp ngoài đời sớm.' },
+  },
+  {
+    email: 'huy.le@fpt.edu.vn', name: 'Huy Le', age: 22, gender: 'male', lookingFor: ['female'], heightCm: 178,
+    campus: 'HCM', major: 'Biz', majorLabel: 'Quản trị kinh doanh',
+    bio: 'Future founder, mê bóng rổ và ramen khuya.',
+    interests: ['Startups', 'Finance', 'Basketball', 'Coffee'],
+    intents: ['serious_relationship'], seriousness: 0.9, pace: 'normal',
+    selfTraits: ['ambitious', 'energetic'], vibeTags: ['Ambitious', 'Energetic'],
+    values: { ambition: 0.9, emotional_stability: 0.6 }, personality: { ambitious: 0.9, energetic: 0.6 },
+    lifestyle: { student_life: 0.6 }, communication: { deepTalk: 0.6, humor: 0.6, textingFrequency: 0.6, directness: 0.8, slowBurn: 0.3, initiatesConversation: 0.8, prefersInPersonSoon: 0.7, emotionalExpression: 0.5 },
+    preferredPartnerTraits: ['goal_oriented', 'stable'], appearanceImportance: 'soft', dealbreakers: [{ trait: 'unclear_intent', severity: 'medium' }],
+    text: { self: 'Mình tham vọng, thích khởi nghiệp, chơi bóng rổ và cà phê bàn ý tưởng.', need: 'Mình tìm mối quan hệ nghiêm túc, rõ ràng mục tiêu, cùng nhau phát triển.', attraction: 'Mình thích người có định hướng, ổn định cảm xúc, biết mình muốn gì.', communication: 'Mình nói chuyện thẳng thắn, chủ động, thích gặp ngoài đời để hiểu nhau nhanh hơn.' },
+  },
+  {
+    email: 'thao.vo@fpt.edu.vn', name: 'Thao Vo', age: 20, gender: 'female', lookingFor: ['male'], heightCm: 160,
+    campus: 'Danang', major: 'Marketing', majorLabel: 'Truyền thông đa phương tiện',
+    bio: 'Content creator thích tập nhảy, chụp ảnh và đi biển.',
+    interests: ['Marketing', 'Photography', 'Dance', 'Travel'],
+    intents: ['gentle_dating', 'new_friends_first'], seriousness: 0.4, pace: 'fast',
+    selfTraits: ['energetic', 'funny'], vibeTags: ['Energetic', 'Funny'],
+    values: { warmth: 0.7, creativity: 0.6 }, personality: { energetic: 0.8 },
+    lifestyle: { party: 0.6, slow_date: 0.3 }, communication: { deepTalk: 0.4, humor: 0.9, textingFrequency: 0.9, directness: 0.6, slowBurn: 0.2, initiatesConversation: 0.7, prefersInPersonSoon: 0.7, emotionalExpression: 0.8 },
+    preferredPartnerTraits: ['emotionally_available'], appearanceImportance: 'medium', dealbreakers: [{ trait: 'ghosting', severity: 'hard' }],
+    text: { self: 'Mình vui vẻ, năng lượng cao, thích chụp ảnh, nhảy và những chuyến đi biển.', need: 'Mình thích bắt đầu làm bạn rồi hẹn hò nhẹ nhàng, không thích quá nghiêm trọng lúc đầu.', attraction: 'Mình thích người ấm áp, biết quan tâm và không ghosting.', communication: 'Mình nhắn rất nhiều, thích meme và sự vui vẻ, ghét bị bỏ lửng.' },
+  },
+  {
+    email: 'duc.nguyen@fpt.edu.vn', name: 'Duc Nguyen', age: 23, gender: 'male', lookingFor: ['female'], heightCm: 175,
+    campus: 'Danang', major: 'SE', majorLabel: 'Kỹ thuật phần mềm',
+    bio: 'Full-stack dev, đóng góp open-source và học guitar acoustic.',
+    interests: ['Coding', 'Music', 'Coffee', 'Reading'],
+    intents: ['serious_relationship', 'study_partner'], seriousness: 0.8, pace: 'slow',
+    selfTraits: ['thoughtful', 'calm'], vibeTags: ['Thoughtful', 'Calm'],
+    values: { empathy: 0.8, emotional_stability: 0.7 }, personality: { calm: 0.8, thoughtful: 0.7 },
+    lifestyle: { chill: 0.7, student_life: 0.6 }, communication: { deepTalk: 0.9, humor: 0.5, textingFrequency: 0.4, directness: 0.5, slowBurn: 0.8, initiatesConversation: 0.3, prefersInPersonSoon: 0.3, emotionalExpression: 0.6 },
+    preferredPartnerTraits: ['good_listener', 'curious'], appearanceImportance: 'none', dealbreakers: [{ trait: 'superficial', severity: 'medium' }],
+    text: { self: 'Mình trầm tính, thích code, đọc sách và chơi guitar; thân rồi thì nói nhiều hơn.', need: 'Mình tìm mối quan hệ nghiêm túc, chậm rãi, có thể học/làm dự án cùng nhau.', attraction: 'Mình thích người biết lắng nghe, tò mò, nói chuyện sâu.', communication: 'Mình nhắn ít nhưng sâu, thích slow burn, không vội gặp ngoài đời.' },
+  },
+  {
+    email: 'an.bui@fpt.edu.vn', name: 'An Bui', age: 21, gender: 'male', lookingFor: ['everyone'], heightCm: 172,
+    campus: 'HCM', major: 'AI', majorLabel: 'Khoa học dữ liệu',
+    bio: 'Data nerd, thích board game và phim khoa học viễn tưởng.',
+    interests: ['AI/ML', 'Gaming', 'Movies', 'Coffee'],
+    intents: ['shared_interests', 'explore'], seriousness: 0.5, pace: 'normal',
+    selfTraits: ['curious', 'chill'], vibeTags: ['Curious', 'Chill'],
+    values: { curiosity: 0.8, creativity: 0.5 }, personality: { curious: 0.8, calm: 0.5 },
+    lifestyle: { chill: 0.7 }, communication: { deepTalk: 0.7, humor: 0.7, textingFrequency: 0.6, directness: 0.5, slowBurn: 0.6, initiatesConversation: 0.5, prefersInPersonSoon: 0.4, emotionalExpression: 0.5 },
+    preferredPartnerTraits: ['curious', 'good_listener'], appearanceImportance: 'soft', dealbreakers: [],
+    text: { self: 'Mình tò mò, thích phân tích dữ liệu, chơi board game và xem phim sci-fi.', need: 'Mình muốn gặp người cùng sở thích, chưa biết chắc nên cứ khám phá tự nhiên.', attraction: 'Mình thích người tò mò, biết lắng nghe và cùng tám về phim, game.', communication: 'Mình nói chuyện cân bằng giữa sâu và vui, không quá áp lực nhịp độ.' },
+  },
+  {
+    email: 'ngan.do@fpt.edu.vn', name: 'Ngan Do', age: 22, gender: 'female', lookingFor: ['male'], heightCm: 158,
+    campus: 'HCM', major: 'Biz', majorLabel: 'Tài chính',
+    bio: 'Yêu yoga, brunch cuối tuần và những cuộc trò chuyện ý nghĩa.',
+    interests: ['Yoga', 'Finance', 'Coffee', 'Reading'],
+    intents: ['serious_relationship'], seriousness: 0.85, pace: 'slow',
+    selfTraits: ['calm', 'ambitious'], vibeTags: ['Calm', 'Ambitious'],
+    values: { emotional_stability: 0.8, ambition: 0.7 }, personality: { calm: 0.7, ambitious: 0.6 },
+    lifestyle: { chill: 0.6 }, communication: { deepTalk: 0.8, humor: 0.5, textingFrequency: 0.5, directness: 0.6, slowBurn: 0.7, initiatesConversation: 0.4, prefersInPersonSoon: 0.4, emotionalExpression: 0.6 },
+    preferredPartnerTraits: ['goal_oriented', 'stable', 'good_listener'], appearanceImportance: 'soft', dealbreakers: [{ trait: 'unclear_intent', severity: 'hard' }, { trait: 'too_party', severity: 'medium' }],
+    text: { self: 'Mình điềm tĩnh, có định hướng, thích yoga, đọc sách và brunch cuối tuần.', need: 'Mình tìm mối quan hệ nghiêm túc với người trưởng thành, rõ ràng mục tiêu.', attraction: 'Mình thích người ổn định cảm xúc, có định hướng và biết lắng nghe.', communication: 'Mình thích trò chuyện sâu, chậm rãi, không thích người quá ham vui party.' },
+  },
+  {
+    email: 'khoa.pham@fpt.edu.vn', name: 'Khoa Pham', age: 20, gender: 'male', lookingFor: ['female'], heightCm: 170,
+    campus: 'Cantho', major: 'Marketing', majorLabel: 'Marketing',
+    bio: 'Thích đá bóng, làm vlog và thử quán ăn mới.',
+    interests: ['Marketing', 'Sports', 'Movies', 'Travel'],
+    intents: ['new_friends_first', 'gentle_dating'], seriousness: 0.45, pace: 'normal',
+    selfTraits: ['funny', 'energetic'], vibeTags: ['Funny', 'Energetic'],
+    values: { warmth: 0.7, creativity: 0.5 }, personality: { energetic: 0.7 },
+    lifestyle: { party: 0.5, slow_date: 0.4 }, communication: { deepTalk: 0.4, humor: 0.9, textingFrequency: 0.7, directness: 0.6, slowBurn: 0.3, initiatesConversation: 0.7, prefersInPersonSoon: 0.7, emotionalExpression: 0.7 },
+    preferredPartnerTraits: ['emotionally_available', 'creative'], appearanceImportance: 'medium', dealbreakers: [{ trait: 'dishonesty', severity: 'hard' }],
+    text: { self: 'Mình hài hước, năng động, thích đá bóng, làm vlog và ăn uống khám phá.', need: 'Mình thích làm bạn trước rồi hẹn hò nhẹ nhàng nếu hợp.', attraction: 'Mình thích người vui vẻ, ấm áp, cùng đi chơi và thử cái mới.', communication: 'Mình nhắn vui vẻ, hay mở lời trước, thích gặp ngoài đời nhanh.' },
+  },
+];
+
+export function buildAnalysis(p) {
+  const hooks = (p.selfTraits || []).concat(p.interests || []).slice(0, 4);
+  return {
+    publicProfile: {
+      displayName: p.name,
+      age: p.age,
+      gender: p.gender,
+      school: p.majorLabel,
+      major: p.majorLabel,
+      heightCm: p.heightCm ?? null,
+      bio: p.bio,
+      vibeSummary: (p.vibeTags || []).join(', '),
+      conversationHooks: hooks,
+    },
+    matchingSignals: {
+      intents: p.intents || [],
+      intentClarity: 0.7,
+      seriousnessLevel: p.seriousness ?? 0.5,
+      relationshipPace: p.pace || 'normal',
+      selfTraits: p.selfTraits || [],
+      interests: p.interests || [],
+      vibeTags: p.vibeTags || [],
+      values: p.values || {},
+      personality: p.personality || {},
+      lifestyle: p.lifestyle || {},
+      preferredPartnerTraits: p.preferredPartnerTraits || [],
+      appearancePreference: { ...emptyAppearance, importance: p.appearanceImportance || 'none' },
+      communication: p.communication || {},
+      dealbreakers: p.dealbreakers || [],
+      confidence: 0.7,
+    },
+    aiReview: {
+      selfSummary: p.text.self,
+      seekingSummary: p.text.need,
+      idealMatchSummary: p.text.attraction,
+      avoidSummary: (p.dealbreakers || []).map(d => d.trait).join(', '),
+      suggestedBio: p.bio,
+    },
+  };
+}
+
+/** The five embedding source strings, mirroring confirm-onboarding-profile's buildVectorTexts. */
+export function buildVectorTexts(p) {
+  const s = p;
+  const join = (...parts) => parts.flat().filter(Boolean).join('. ');
+  return {
+    self: join(s.text.self, s.selfTraits, s.interests, s.vibeTags, s.bio),
+    need: join(s.text.need, s.intents, `seriousness ${s.seriousness}`, s.pace),
+    preference: join(s.text.attraction, s.preferredPartnerTraits, Object.keys(s.values || {})),
+    communication: join(s.text.communication),
+    lifestyle: join(s.text.self, Object.keys(s.lifestyle || {}), s.vibeTags, s.interests),
+  };
+}

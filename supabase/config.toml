@@ -28,19 +28,25 @@ additional_redirect_urls = [
 enabled = true
 
 [functions.generate-daily-matches]
-verify_jwt = true
+verify_jwt = false
+
+[functions.analyze-onboarding-profile]
+verify_jwt = false
+
+[functions.confirm-onboarding-profile]
+verify_jwt = false
 
 [functions.submit-match-feedback]
-verify_jwt = true
+verify_jwt = false
 
 [functions.accept-curated-match]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-preference-chat-message]
-verify_jwt = true
+verify_jwt = false
 
 [functions.find-blind-date-partner]
-verify_jwt = true
+verify_jwt = false
 
 [functions.request-reveal]
-verify_jwt = true
+verify_jwt = false

@@ -1,5 +1,6 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 import { assertFptEmail } from '@flove/core';
 import { supabase } from '@/lib/supabase';
 
@@ -25,16 +26,18 @@ export async function signUpWithPassword(email: string, password: string) {
 
 export async function signInWithGoogle() {
   const redirectTo = Linking.createURL('/auth/callback');
+  const shouldOpenAuthSession = Platform.OS !== 'web';
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
-      skipBrowserRedirect: true,
+      skipBrowserRedirect: shouldOpenAuthSession,
     },
   });
   if (error) throw error;
-  if (!data.url) return;
-  await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (shouldOpenAuthSession && data.url) {
+    await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  }
 }
 
 export async function sendPasswordReset(email: string) {

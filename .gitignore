@@ -37,4 +37,11 @@ apps/*/.env.*
 .shared
 .claude/
 .firebase/
+supabase/.temp/
 estimate.txt
+
+# Design handoff bundles (reference-only prototypes / assets)
+.design-handoff/
+*.dc.html
+*-handoff.zip
+*-handoff.zip:Zone.Identifier

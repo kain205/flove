@@ -1,4 +1,5 @@
 import type { ProfileText, UserProfile } from './types';
+import { hasCompletedOnboarding } from './onboarding';
 
 export const INTERESTS = [
   'Coding', 'Gaming', 'Music', 'Photography', 'Travel',
@@ -30,7 +31,8 @@ export type ProfileRequirementId =
   | 'interests'
   | 'personalityTags'
   | 'datingGoals'
-  | 'profileText';
+  | 'profileText'
+  | 'onboardingSignals';
 
 export interface ProfileReadinessRequirement {
   id: ProfileRequirementId;
@@ -48,6 +50,8 @@ export interface ProfileReadiness {
 export function normalizeProfileText(user: Partial<UserProfile>): ProfileText {
   return {
     bio: user.profileText?.bio ?? user.bio ?? '',
+    school: user.profileText?.school ?? '',
+    majorLabel: user.profileText?.majorLabel ?? '',
     weekendStyle: user.profileText?.weekendStyle ?? '',
     conversationStyle: user.profileText?.conversationStyle ?? '',
     memorableThing: user.profileText?.memorableThing ?? '',
@@ -92,12 +96,14 @@ export function getProfileReadiness(user: Partial<UserProfile>): ProfileReadines
     { id: 'personalityTags', isMet: (user.personalityTags?.length ?? 0) >= 1 },
     { id: 'datingGoals', isMet: (user.datingGoals?.length ?? 0) >= 1 },
     { id: 'profileText', isMet: signalCount >= 1 },
+    { id: 'onboardingSignals', isMet: hasCompletedOnboarding(user.aiSignals) },
   ];
   const completeness = calculateProfileCompleteness(user);
   const isComplete = completeness >= 75
     && requirements.find(requirement => requirement.id === 'age')?.isMet
     && requirements.find(requirement => requirement.id === 'interests')?.isMet
-    && requirements.find(requirement => requirement.id === 'profileText')?.isMet;
+    && requirements.find(requirement => requirement.id === 'profileText')?.isMet
+    && requirements.find(requirement => requirement.id === 'onboardingSignals')?.isMet;
 
   return {
     completeness,

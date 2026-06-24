@@ -1,5 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 export function createRequestClient(req: Request) {
   const url = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -31,13 +37,26 @@ export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
+      ...corsHeaders,
       'Content-Type': 'application/json',
     },
   });
 }
 
+function corsResponse(): Response {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
 export async function requireUser(req: Request) {
   const client = createRequestClient(req);
+
+  if (req.method === 'OPTIONS') {
+    return { client, user: null, response: corsResponse() };
+  }
+
   const { data, error } = await client.auth.getUser();
   if (error || !data.user) {
     return { client, user: null, response: jsonResponse({ error: 'Not authenticated' }, 401) };
