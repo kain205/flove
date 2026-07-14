@@ -5,7 +5,7 @@ values
   ('00000000-0000-0000-0000-000000000003', 'chi@fpt.edu.vn', crypt('password123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"name":"Chi"}', 'authenticated', 'authenticated')
 on conflict (id) do nothing;
 
-insert into public.profiles (
+insert into public.profiles as current_profile (
   id,
   email,
   name,
@@ -18,13 +18,29 @@ insert into public.profiles (
   dating_goals,
   preferred_vibes,
   profile_text,
-  profile_completeness
+  profile_completeness,
+  gender,
+  looking_for_gender,
+  age_pref_min,
+  age_pref_max,
+  profile_confirmed,
+  profile_confirmed_at,
+  onboarding_answers,
+  onboarding_version
 )
 values
-  ('00000000-0000-0000-0000-000000000001', 'an@fpt.edu.vn', 'An', 21, 'SE', 'HCM', 'Thich cafe cuoi tuan va side project co ich.', '{"Coding","Coffee","Music"}', '{"Chill","Curious"}', '{"Coffee dates","Slow connection"}', '{"Deep talks","Easy-going"}', '{"bio":"Thich cafe cuoi tuan va side project co ich.","weekendStyle":"Cafe va code.","conversationStyle":"Cham rai va that."}', 100),
-  ('00000000-0000-0000-0000-000000000002', 'binh@fpt.edu.vn', 'Binh', 22, 'AI', 'HCM', 'Quan tam AI, bong ro va nhung buoi noi chuyen vui.', '{"AI/ML","Basketball","Coffee"}', '{"Funny","Ambitious"}', '{"Coffee dates","New friends first"}', '{"Active plans","Career-minded"}', '{"bio":"Quan tam AI, bong ro va nhung buoi noi chuyen vui."}', 100),
-  ('00000000-0000-0000-0000-000000000003', 'chi@fpt.edu.vn', 'Chi', 20, 'Design', 'HCM', 'Thich art, music va cac buoi di dao nhe.', '{"Art","Music","Photography"}', '{"Creative","Calm"}', '{"Slow connection","Weekend hangouts"}', '{"Creative energy","Quiet dates"}', '{"bio":"Thich art, music va cac buoi di dao nhe."}', 100)
-on conflict (id) do nothing;
+  ('00000000-0000-0000-0000-000000000001', 'an@fpt.edu.vn', 'An', 21, 'SE', 'HCM', 'Thich cafe cuoi tuan va side project co ich.', '{"Coding","Coffee","Music"}', '{"Chill","Curious"}', '{"Coffee dates","Slow connection"}', '{"Deep talks","Easy-going"}', '{"bio":"Thich cafe cuoi tuan va side project co ich.","weekendStyle":"Cafe va code.","conversationStyle":"Cham rai va that."}', 100, 'male', '{"female"}', 18, 25, true, now(), '[]', 2),
+  ('00000000-0000-0000-0000-000000000002', 'binh@fpt.edu.vn', 'Binh', 22, 'AI', 'HCM', 'Quan tam AI, bong ro va nhung buoi noi chuyen vui.', '{"AI/ML","Basketball","Coffee"}', '{"Funny","Ambitious"}', '{"Coffee dates","New friends first"}', '{"Active plans","Career-minded"}', '{"bio":"Quan tam AI, bong ro va nhung buoi noi chuyen vui."}', 100, 'male', '{"female"}', 18, 25, true, now(), '[]', 2),
+  ('00000000-0000-0000-0000-000000000003', 'chi@fpt.edu.vn', 'Chi', 20, 'Design', 'HCM', 'Thich art, music va cac buoi di dao nhe.', '{"Art","Music","Photography"}', '{"Creative","Calm"}', '{"Slow connection","Weekend hangouts"}', '{"Creative energy","Quiet dates"}', '{"bio":"Thich art, music va cac buoi di dao nhe."}', 100, 'female', '{"male"}', 18, 25, true, now(), '[]', 2)
+on conflict (id) do update set
+  profile_completeness = excluded.profile_completeness,
+  gender = excluded.gender,
+  looking_for_gender = excluded.looking_for_gender,
+  age_pref_min = excluded.age_pref_min,
+  age_pref_max = excluded.age_pref_max,
+  profile_confirmed = excluded.profile_confirmed,
+  profile_confirmed_at = coalesce(current_profile.profile_confirmed_at, excluded.profile_confirmed_at),
+  onboarding_version = excluded.onboarding_version;
 
 insert into public.preference_profiles (user_id, summary, soft_preferences)
 values

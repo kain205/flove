@@ -11,6 +11,8 @@ node_modules
 .expo
 dist
 dist-ssr
+playwright-report
+test-results
 
 # Environment files
 .env
@@ -32,8 +34,10 @@ apps/*/.env.*
 *.sln
 *.sw?
 
-# UI/UX Pro Max
-.github
+# UI/UX Pro Max (keep generated prompts ignored, but allow CI workflows)
+.github/*
+!.github/workflows/
+!.github/workflows/**
 .shared
 .claude/
 .firebase/

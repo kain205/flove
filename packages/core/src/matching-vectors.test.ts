@@ -7,6 +7,8 @@ import {
   hardDealbreakerOk,
   passesHardFilters,
   finalScore,
+  deterministicScoreComponents,
+  scoreFromComponents,
   toCompatibilityScore,
   type MatchProfile,
   type VectorSet,
@@ -49,10 +51,12 @@ describe('hard filters', () => {
     expect(discoveryCompatible(she, heWantsMen)).toBe(false);
   });
 
-  it('never hard-excludes neutral genders and empty preferences', () => {
+  it('does not relax an explicit gender preference for hidden gender', () => {
     const she = profile({ id: 'a', gender: 'female', lookingForGender: ['male'] });
     const hidden = profile({ id: 'b', gender: 'prefer_not_to_show', lookingForGender: [] });
-    expect(discoveryCompatible(she, hidden)).toBe(true);
+    const open = profile({ id: 'c', gender: 'female', lookingForGender: ['everyone'] });
+    expect(discoveryCompatible(she, hidden)).toBe(false);
+    expect(discoveryCompatible(open, hidden)).toBe(true);
   });
 
   it('applies age preference only when bounds are set', () => {
@@ -68,7 +72,12 @@ describe('hard filters', () => {
     });
     expect(heightHardCompatible(hard, profile({ id: 'b', heightCm: 165 }))).toBe(false);
     expect(heightHardCompatible(hard, profile({ id: 'b', heightCm: 175 }))).toBe(true);
-    expect(heightHardCompatible(hard, profile({ id: 'b', heightCm: null }))).toBe(true);
+    expect(heightHardCompatible(hard, profile({ id: 'b', heightCm: null }))).toBe(false);
+    const hardWithoutConstraint = profile({
+      id: 'a',
+      appearancePreference: { ...EMPTY_APPEARANCE_PREFERENCE, heightPreference: { importance: 'hard' } },
+    });
+    expect(heightHardCompatible(hardWithoutConstraint, profile({ id: 'b', heightCm: null }))).toBe(true);
     const soft = profile({
       id: 'a',
       appearancePreference: { ...EMPTY_APPEARANCE_PREFERENCE, heightPreference: { importance: 'soft', minHeightCm: 170 } },
@@ -133,5 +142,24 @@ describe('finalScore', () => {
     const score = toCompatibilityScore(finalScore(self, cand, emptyVecs, emptyVecs), true);
     expect(score).toBeGreaterThanOrEqual(45);
     expect(score).toBeLessThanOrEqual(96);
+  });
+
+  it('uses scalar database similarities without vectors and caps learned feedback', () => {
+    const self = profile({ id: 'a', signals: baseSignals, interests: ['Coffee'] });
+    const cand = profile({ id: 'b', signals: baseSignals, interests: ['Coffee'] });
+    const positive = deterministicScoreComponents(self, cand, {
+      mutualPreference: 0.9,
+      need: 0.8,
+      feedbackAdjustment: 10,
+    });
+    const negative = deterministicScoreComponents(self, cand, {
+      mutualPreference: 0.9,
+      need: 0.8,
+      feedbackAdjustment: -10,
+    });
+
+    expect(positive.feedbackAdjustment).toBe(0.08);
+    expect(negative.feedbackAdjustment).toBe(-0.08);
+    expect(scoreFromComponents(positive) - scoreFromComponents(negative)).toBeCloseTo(0.16, 5);
   });
 });

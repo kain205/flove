@@ -1,74 +1,42 @@
-import { createServiceClient, jsonResponse, requireUser } from '../_shared/client.ts';
+import { errorResponse, expectedUserFenceResponse, jsonObjectBody, jsonResponse, requireUser, rpcErrorResponse } from '../_shared/client.ts';
 
 const names = ['Anonymous FPT Student', 'Quiet Coder', 'Campus Explorer', 'Coffee Match'];
 
 Deno.serve(async req => {
-  const { client, user, response } = await requireUser(req);
+  const startedAt = performance.now();
+  const { client, user, requestId, response } = await requireUser(req);
   if (response) return response;
-  const admin = createServiceClient();
+
+  const body = await jsonObjectBody(req);
+  const fenceResponse = expectedUserFenceResponse(body, user!.id, requestId);
+  if (fenceResponse) return fenceResponse;
 
   const maskedName = names[Math.floor(Math.random() * names.length)];
-  const { data: waiting } = await client
-    .from('blind_date_queue')
-    .select('user_id,masked_name')
-    .eq('status', 'waiting')
-    .neq('user_id', user!.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (!waiting) {
-    const { error } = await admin.from('blind_date_queue').upsert({
-      user_id: user!.id,
-      masked_name: maskedName,
-      status: 'waiting',
-      queued_at: new Date().toISOString(),
-    });
-    if (error) return jsonResponse({ error: error.message }, 400);
-
-    return jsonResponse({
-      ok: true,
-      waiting: true,
-      sessionId: null,
-      partnerId: null,
-      partnerMaskedName: maskedName,
-    });
+  const { data, error } = await client.rpc('find_blind_date_partner_atomic' as never, {
+    p_masked_name: maskedName,
+  } as never);
+  if (error) {
+    console.error(JSON.stringify({ event: 'blind_date_failed', requestId, userId: user!.id, code: error.code }));
+    return rpcErrorResponse(requestId, error, 'blind_date_failed', 'Chưa thể ghép Blind Date lúc này.');
   }
 
-  const pair = [user!.id, waiting.user_id].sort();
-  const sessionId = `blind_${pair.join('_')}_${Date.now()}`;
-  const conversationId = `blind_conversation_${pair.join('_')}_${Date.now()}`;
+  const result: any = Array.isArray(data) ? data[0] : data;
+  if (!result) return errorResponse(requestId, 'blind_date_failed', 'No queue result returned.', 500, true);
+  const waiting = Boolean(result.waiting);
 
-  const { error: conversationError } = await admin.from('conversations').insert({
-    id: conversationId,
-    is_anonymous: true,
-  });
-  if (conversationError) return jsonResponse({ error: conversationError.message }, 400);
-
-  const { error: participantError } = await admin.from('conversation_participants').insert([
-    { conversation_id: conversationId, user_id: user!.id, masked_name: maskedName },
-    { conversation_id: conversationId, user_id: waiting.user_id, masked_name: waiting.masked_name },
-  ]);
-  if (participantError) return jsonResponse({ error: participantError.message }, 400);
-
-  const { error: sessionError } = await admin.from('blind_date_sessions').insert({
-    id: sessionId,
-    conversation_id: conversationId,
-    user_ids: pair,
-    partner_masked_names: {
-      [user!.id]: waiting.masked_name,
-      [waiting.user_id]: maskedName,
-    },
-  });
-  if (sessionError) return jsonResponse({ error: sessionError.message }, 400);
-
-  await admin.from('blind_date_queue').update({ status: 'matched' }).in('user_id', pair);
+  console.log(JSON.stringify({
+    event: 'blind_date_completed',
+    requestId,
+    userId: user!.id,
+    waiting,
+    durationMs: Math.round(performance.now() - startedAt),
+  }));
 
   return jsonResponse({
     ok: true,
-    waiting: false,
-    sessionId,
-    conversationId,
-    partnerId: waiting.user_id,
-    partnerMaskedName: waiting.masked_name,
-  });
+    waiting,
+    sessionId: result.session_id ?? null,
+    conversationId: result.conversation_id ?? undefined,
+    ...(waiting ? {} : { partnerMaskedName: result.partner_masked_name ?? maskedName }),
+  }, 200, requestId);
 });

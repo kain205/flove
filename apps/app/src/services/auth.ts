@@ -3,6 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { assertFptEmail } from '@flove/core';
 import { supabase } from '@/lib/supabase';
+import { passwordSignUpResult } from './passwordSignup';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -21,15 +22,17 @@ export async function signInWithPassword(email: string, password: string) {
 }
 
 export async function signUpWithPassword(email: string, password: string) {
-  assertFptEmail(email);
-  const { error } = await supabase.auth.signUp({
-    email,
+  const normalizedEmail = email.trim().toLowerCase();
+  assertFptEmail(normalizedEmail);
+  const { data, error } = await supabase.auth.signUp({
+    email: normalizedEmail,
     password,
     options: {
       emailRedirectTo: createAuthRedirect('/auth/callback'),
     },
   });
   if (error) throw error;
+  return passwordSignUpResult(data.session, normalizedEmail);
 }
 
 export async function signInWithGoogle() {

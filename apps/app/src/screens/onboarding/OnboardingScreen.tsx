@@ -20,12 +20,29 @@ import {
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 import { signOut } from '@/services/auth';
-import { loadCurrentProfile } from '@/services/profile';
+import { loadCurrentProfile, profileQueryKey } from '@/services/profile';
 import { uploadAvatar } from '@/services/photos';
 import { supabase } from '@/lib/supabase';
-import { analyzeOnboardingProfile, confirmOnboardingProfile, type OnboardingAnswerInput, type OnboardingBasicInput } from '@flove/supabase';
+import {
+  analyzeOnboardingProfile,
+  confirmOnboardingProfile,
+  getOnboardingDraft,
+  saveOnboardingDraft,
+  type OnboardingAnswerInput,
+  type OnboardingBasicInput,
+} from '@flove/supabase';
 import { colors, fonts, gradients, radii } from '@/theme';
-import type { AIProfileAnalysis, Campus, Major } from '@flove/core';
+import {
+  ONBOARDING_VERSION,
+  overlayProfileOnOnboardingDraft,
+  type AIProfileAnalysis,
+  type Campus,
+  type Major,
+  type OnboardingDraftV2,
+  type OnboardingReviewEdits,
+  type UserProfile,
+} from '@flove/core';
+import { useAuth } from '@/providers/AuthProvider';
 
 const wideBreakpoint = 900;
 const reviewStep = 6;
@@ -167,6 +184,8 @@ interface NotebookDraft {
   major: Major;
   majorLabel: string;
   heightCm: string;
+  agePrefMin: number | null;
+  agePrefMax: number | null;
   avatarUrl: string;
   needChips: string[];
   needText: string;
@@ -183,19 +202,21 @@ interface NotebookDraft {
 
 const emptyDraft: NotebookDraft = {
   name: '', age: '', gender: '', genderText: '', lookingFor: [],
-  school: '', campus: 'HCM', major: 'SE', majorLabel: '', heightCm: '', avatarUrl: '',
+  school: '', campus: 'HCM', major: 'SE', majorLabel: '', heightCm: '', agePrefMin: null, agePrefMax: null, avatarUrl: '',
   needChips: [], needText: '', selfChips: [], selfText: '',
   attractionText: '', appearanceImportance: 'none', appearanceSpecifics: '',
   communicationText: '', boundaryChips: [], boundaryText: '', boundaryUnsure: false,
 };
 
-interface ReviewEdits {
-  selfSummary: string;
-  seekingSummary: string;
-  idealMatchSummary: string;
-  avoidSummary: string;
-  suggestedBio: string;
-}
+type ReviewEdits = OnboardingReviewEdits;
+
+const emptyReviewEdits: ReviewEdits = {
+  selfSummary: '',
+  seekingSummary: '',
+  idealMatchSummary: '',
+  avoidSummary: '',
+  suggestedBio: '',
+};
 
 const stepMetas = [
   { icon: '🧡', title: 'Bắt đầu với bạn', subtitle: 'F-Love cần vài thông tin cơ bản để gợi ý đúng người hơn.' },
@@ -240,6 +261,102 @@ function inferMajorFromLabel(label: string): Major {
   if (normalized.includes('thiet ke') || normalized.includes('kien truc')) return 'Design';
   if (normalized.includes('cong nghe') || normalized.includes('may tinh') || normalized.includes('phan mem') || normalized.includes('an toan') || normalized.includes('dien') || normalized.includes('co khi')) return 'SE';
   return 'Biz';
+}
+
+function answerValue(answers: OnboardingAnswerInput[], questionId: string): string | string[] | undefined {
+  return answers.find(answer => answer.questionId === questionId)?.value;
+}
+
+function answerTextValue(answers: OnboardingAnswerInput[], questionId: string): string {
+  const value = answerValue(answers, questionId);
+  return Array.isArray(value) ? value.join(', ') : value ?? '';
+}
+
+function answerListValue(answers: OnboardingAnswerInput[], questionId: string): string[] {
+  const value = answerValue(answers, questionId);
+  return Array.isArray(value) ? value : value ? [value] : [];
+}
+
+function notebookFromPayload(payload: OnboardingDraftV2): NotebookDraft {
+  const { basic, answers } = payload;
+  return {
+    ...emptyDraft,
+    name: basic.name ?? '',
+    age: basic.age ? String(basic.age) : '',
+    gender: basic.gender ?? '',
+    genderText: basic.genderText ?? '',
+    lookingFor: basic.lookingForGender ?? [],
+    school: basic.school ?? '',
+    campus: (basic.campus as Campus | undefined) ?? 'HCM',
+    major: (basic.major as Major | undefined) ?? 'SE',
+    majorLabel: basic.majorLabel ?? '',
+    heightCm: basic.heightCm ? String(basic.heightCm) : '',
+    agePrefMin: basic.agePrefMin ?? null,
+    agePrefMax: basic.agePrefMax ?? null,
+    avatarUrl: basic.avatarUrl ?? '',
+    needChips: answerListValue(answers, 'need_chips'),
+    needText: answerTextValue(answers, 'need_text'),
+    selfChips: answerListValue(answers, 'self_chips'),
+    selfText: answerTextValue(answers, 'self_text'),
+    attractionText: answerTextValue(answers, 'attraction_text'),
+    appearanceImportance: answerTextValue(answers, 'appearance_importance') || 'none',
+    appearanceSpecifics: answerTextValue(answers, 'appearance_specifics'),
+    communicationText: answerTextValue(answers, 'communication_text'),
+    boundaryChips: answerListValue(answers, 'boundaries_chips'),
+    boundaryText: answerTextValue(answers, 'boundaries_text'),
+    boundaryUnsure: answerTextValue(answers, 'boundaries_unsure') === 'true',
+  };
+}
+
+function profileDraft(profile: UserProfile | null | undefined): OnboardingDraftV2 {
+  const legacyAnalysis = profile?.aiProfileAnalysis;
+  const legacySignals = legacyAnalysis?.matchingSignals;
+  const legacyAnswers: OnboardingAnswerInput[] = [
+    { questionId: 'need_chips', value: legacySignals?.intents ?? profile?.datingGoals ?? [] },
+    { questionId: 'need_text', value: legacyAnalysis?.aiReview?.seekingSummary ?? '' },
+    { questionId: 'self_chips', value: legacySignals?.selfTraits ?? profile?.personalityTags ?? [] },
+    { questionId: 'self_text', value: profile?.profileText.bio || profile?.bio || legacyAnalysis?.aiReview?.selfSummary || '' },
+    { questionId: 'attraction_text', value: legacyAnalysis?.aiReview?.idealMatchSummary ?? '' },
+    { questionId: 'appearance_importance', value: legacySignals?.appearancePreference?.importance ?? 'none' },
+    { questionId: 'appearance_specifics', value: [
+      ...(legacySignals?.appearancePreference?.preferredStyleTags ?? []),
+      ...(legacySignals?.appearancePreference?.preferredAppearanceVibeTags ?? []),
+    ].join(', ') },
+    { questionId: 'communication_text', value: legacyAnalysis?.publicProfile?.conversationHooks?.join('. ') ?? '' },
+    { questionId: 'boundaries_chips', value: legacySignals?.dealbreakers?.flatMap(item => item?.trait ? [item.trait] : []) ?? [] },
+    { questionId: 'boundaries_text', value: legacyAnalysis?.aiReview?.avoidSummary ?? '' },
+    { questionId: 'boundaries_unsure', value: legacySignals?.dealbreakers?.length ? 'false' : 'true' },
+  ];
+  return {
+    version: ONBOARDING_VERSION,
+    step: 0,
+    basic: {
+      name: profile?.name ?? '',
+      age: profile?.age || undefined,
+      gender: profile?.gender ?? '',
+      genderText: profile?.genderText ?? '',
+      lookingForGender: profile?.lookingForGender ?? [],
+      school: profile?.profileText.school ?? '',
+      campus: profile?.campus ?? 'HCM',
+      major: profile?.major ?? 'SE',
+      majorLabel: profile?.profileText.majorLabel ?? '',
+      heightCm: profile?.heightCm ?? null,
+      avatarUrl: profile?.avatarUrl ?? '',
+      agePrefMin: profile?.agePref?.min ?? null,
+      agePrefMax: profile?.agePref?.max ?? null,
+    },
+    answers: profile?.onboardingAnswers?.length ? profile.onboardingAnswers : legacyAnswers,
+  };
+}
+
+function reviewFromAnalysis(analysis: AIProfileAnalysis): ReviewEdits {
+  return {
+    selfSummary: analysis.aiReview.selfSummary ?? '',
+    seekingSummary: analysis.aiReview.seekingSummary ?? '',
+    idealMatchSummary: analysis.aiReview.idealMatchSummary ?? '',
+    avoidSummary: analysis.aiReview.avoidSummary ?? '',
+    suggestedBio: analysis.aiReview.suggestedBio ?? '',
+  };
 }
 
 function longTextHelper(text: string, min: number) {
@@ -324,13 +441,33 @@ function SearchableDropdown<T extends { label: string }>({
 
 export function OnboardingScreen() {
   const queryClient = useQueryClient();
+  const { session } = useAuth();
+  const userId = session?.user.id;
   const params = useLocalSearchParams<{ mode?: string }>();
-  const profileQuery = useQuery({ queryKey: ['profile'], queryFn: loadCurrentProfile });
+  const profileKey = profileQueryKey(userId);
+  const onboardingDraftKey = ['onboarding-draft', userId ?? 'anonymous'] as const;
+  const profileQuery = useQuery({
+    queryKey: profileKey,
+    queryFn: () => loadCurrentProfile(userId),
+    enabled: Boolean(userId),
+  });
+  const persistedDraftQuery = useQuery({
+    queryKey: onboardingDraftKey,
+    queryFn: () => getOnboardingDraft(supabase, userId),
+    enabled: Boolean(userId),
+    retry: 1,
+  });
   const { width } = useWindowDimensions();
   const isWide = width >= wideBreakpoint;
   const isEditMode = params.mode === 'edit';
 
   const [draft, setDraft] = useState<NotebookDraft>(emptyDraft);
+  const [hydrated, setHydrated] = useState(false);
+  const [draftRevision, setDraftRevision] = useState(0);
+  const [analysisRevision, setAnalysisRevision] = useState<number | null>(null);
+  const [autosaveError, setAutosaveError] = useState('');
+  const [isAutosaving, setIsAutosaving] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
@@ -339,56 +476,170 @@ export function OnboardingScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [analysis, setAnalysis] = useState<AIProfileAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [reviewEdits, setReviewEdits] = useState<ReviewEdits>({ selfSummary: '', seekingSummary: '', idealMatchSummary: '', avoidSummary: '', suggestedBio: '' });
+  const [reviewEdits, setReviewEdits] = useState<ReviewEdits>(emptyReviewEdits);
   const anim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const revisionRef = useRef(0);
+  const lastSavedFingerprintRef = useRef('');
+  const analysisDraftFingerprintRef = useRef('');
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeUserIdRef = useRef(userId);
+  const previousUserIdRef = useRef(userId);
+  activeUserIdRef.current = userId;
 
   useEffect(() => {
-    const profile = profileQuery.data;
-    if (!profile) return;
-    setDraft(current => ({
-      ...current,
-      name: current.name || profile.name || '',
-      age: current.age || (profile.age ? String(profile.age) : ''),
-      gender: current.gender || profile.gender || '',
-      genderText: current.genderText || profile.genderText || '',
-      lookingFor: current.lookingFor.length ? current.lookingFor : (profile.lookingForGender ?? []),
-      school: current.school || profile.profileText.school || '',
-      campus: profile.campus ?? current.campus,
-      major: profile.major ?? current.major,
-      majorLabel: current.majorLabel || profile.profileText.majorLabel || '',
-      heightCm: current.heightCm || (profile.heightCm ? String(profile.heightCm) : ''),
-      avatarUrl: current.avatarUrl || profile.avatarUrl || '',
-      selfText: current.selfText || profile.profileText.bio || profile.bio || '',
-    }));
-  }, [profileQuery.data]);
+    if (previousUserIdRef.current === userId) return;
+    previousUserIdRef.current = userId;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = null;
+    revisionRef.current = 0;
+    lastSavedFingerprintRef.current = '';
+    analysisDraftFingerprintRef.current = '';
+    saveQueueRef.current = Promise.resolve();
+    setDraft(emptyDraft);
+    setStep(0);
+    setDir(1);
+    setDraftRevision(0);
+    setAnalysisRevision(null);
+    setAnalysis(null);
+    setReviewEdits(emptyReviewEdits);
+    setAutosaveError('');
+    setAnalysisError('');
+    setStepError('');
+    setIsAutosaving(false);
+    setAnalyzing(false);
+    setIsSaving(false);
+    setUploadingAvatar(false);
+    setShowDone(false);
+    setHydrated(false);
+    anim.stopAnimation();
+    anim.setValue(1);
+    progressAnim.stopAnimation();
+    progressAnim.setValue(0);
+  }, [anim, progressAnim, userId]);
 
-  const buildAnswers = (): OnboardingAnswerInput[] => [
-    { questionId: 'need_chips', value: draft.needChips },
-    { questionId: 'need_text', value: draft.needText.trim() },
-    { questionId: 'self_chips', value: draft.selfChips },
-    { questionId: 'self_text', value: draft.selfText.trim() },
-    { questionId: 'attraction_text', value: draft.attractionText.trim() },
-    { questionId: 'appearance_importance', value: draft.appearanceImportance },
-    { questionId: 'appearance_specifics', value: draft.appearanceSpecifics.trim() },
-    { questionId: 'communication_text', value: draft.communicationText.trim() },
-    { questionId: 'boundaries_chips', value: draft.boundaryChips },
-    { questionId: 'boundaries_text', value: draft.boundaryUnsure ? '' : draft.boundaryText.trim() },
+  useEffect(() => {
+    if (hydrated || profileQuery.isLoading || persistedDraftQuery.isLoading) return;
+    if ((profileQuery.isError && !profileQuery.data) || (persistedDraftQuery.isError && !persistedDraftQuery.data)) return;
+    const persisted = persistedDraftQuery.data;
+    const profile = profileQuery.data;
+    let payload = persisted?.draft ?? profileDraft(profile);
+    const profileIsAtLeastAsRecent = profile && (
+      !persisted
+      || !profile.updatedAt
+      || profile.updatedAt.getTime() >= persisted.updatedAt.getTime()
+    );
+    if (isEditMode && persisted && profileIsAtLeastAsRecent) {
+      payload = overlayProfileOnOnboardingDraft(payload, profile);
+    }
+    const nextDraft = notebookFromPayload(payload);
+    setDraft(nextDraft);
+    const nextRevision = persisted?.draftRevision ?? 0;
+    revisionRef.current = nextRevision;
+    setDraftRevision(nextRevision);
+    lastSavedFingerprintRef.current = persisted ? JSON.stringify(persisted.draft) : '';
+    setStep(isEditMode ? 0 : payload.step);
+    if (persisted?.analysis && persisted.analysisRevision === persisted.draftRevision && !isEditMode) {
+      setAnalysis(persisted.analysis);
+      setAnalysisRevision(persisted.analysisRevision);
+      setReviewEdits(reviewFromAnalysis(persisted.analysis));
+      analysisDraftFingerprintRef.current = JSON.stringify(nextDraft);
+    }
+    setHydrated(true);
+  }, [hydrated, isEditMode, persistedDraftQuery.data, persistedDraftQuery.isError, persistedDraftQuery.isLoading, profileQuery.data, profileQuery.isError, profileQuery.isLoading]);
+
+  const buildAnswers = (value = draft): OnboardingAnswerInput[] => [
+    { questionId: 'need_chips', value: value.needChips },
+    { questionId: 'need_text', value: value.needText.trim() },
+    { questionId: 'self_chips', value: value.selfChips },
+    { questionId: 'self_text', value: value.selfText.trim() },
+    { questionId: 'attraction_text', value: value.attractionText.trim() },
+    { questionId: 'appearance_importance', value: value.appearanceImportance },
+    { questionId: 'appearance_specifics', value: value.appearanceSpecifics.trim() },
+    { questionId: 'communication_text', value: value.communicationText.trim() },
+    { questionId: 'boundaries_chips', value: value.boundaryChips },
+    { questionId: 'boundaries_text', value: value.boundaryUnsure ? '' : value.boundaryText.trim() },
+    { questionId: 'boundaries_unsure', value: value.boundaryUnsure ? 'true' : 'false' },
   ];
 
-  const buildBasic = (): OnboardingBasicInput => ({
-    name: draft.name.trim(),
-    age: Number.parseInt(draft.age, 10) || 0,
-    gender: draft.gender || 'prefer_not_to_show',
-    genderText: draft.gender === 'other' ? draft.genderText.trim() : undefined,
-    lookingForGender: draft.lookingFor,
-    heightCm: draft.heightCm ? Number.parseInt(draft.heightCm, 10) || null : null,
-    school: draft.school.trim(),
-    majorLabel: draft.majorLabel.trim(),
-    major: draft.major,
-    campus: draft.campus,
-    avatarUrl: draft.avatarUrl.trim(),
+  const buildBasic = (value = draft): OnboardingBasicInput => ({
+    name: value.name.trim(),
+    age: Number.parseInt(value.age, 10) || 0,
+    gender: value.gender,
+    genderText: value.gender === 'other' ? value.genderText.trim() : undefined,
+    lookingForGender: value.lookingFor,
+    heightCm: value.heightCm ? Number.parseInt(value.heightCm, 10) || null : null,
+    agePrefMin: value.agePrefMin,
+    agePrefMax: value.agePrefMax,
+    school: value.school.trim(),
+    majorLabel: value.majorLabel.trim(),
+    major: value.major,
+    campus: value.campus,
+    avatarUrl: value.avatarUrl.trim(),
   });
+
+  const buildPersistedDraft = (value = draft, atStep = step): OnboardingDraftV2 => ({
+    version: ONBOARDING_VERSION,
+    step: atStep,
+    basic: buildBasic(value),
+    answers: buildAnswers(value),
+  });
+
+  const persistPayload = async (payload: OnboardingDraftV2): Promise<number> => {
+    const ownerUserId = userId;
+    if (!ownerUserId) throw new Error('Not authenticated');
+    const fingerprint = JSON.stringify(payload);
+    const task = saveQueueRef.current.catch(() => undefined).then(async () => {
+      if (activeUserIdRef.current !== ownerUserId) throw new Error('Session changed while saving draft.');
+      if (fingerprint === lastSavedFingerprintRef.current) return revisionRef.current;
+      setIsAutosaving(true);
+      setAutosaveError('');
+      try {
+        const saved = await saveOnboardingDraft(supabase, payload, revisionRef.current, ownerUserId);
+        if (activeUserIdRef.current !== ownerUserId) throw new Error('Session changed while saving draft.');
+        revisionRef.current = saved.draftRevision;
+        setDraftRevision(saved.draftRevision);
+        lastSavedFingerprintRef.current = fingerprint;
+        setAnalysis(null);
+        setAnalysisRevision(null);
+        analysisDraftFingerprintRef.current = '';
+        queryClient.setQueryData(onboardingDraftKey, saved);
+        return saved.draftRevision;
+      } catch (error) {
+        if (activeUserIdRef.current === ownerUserId) {
+          const message = error instanceof Error ? error.message : 'Chưa tự động lưu được bản nháp.';
+          setAutosaveError(message);
+        }
+        throw error;
+      } finally {
+        if (activeUserIdRef.current === ownerUserId) setIsAutosaving(false);
+      }
+    });
+    saveQueueRef.current = task;
+    return task;
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (analysisDraftFingerprintRef.current && analysisDraftFingerprintRef.current !== JSON.stringify(draft)) {
+      setAnalysis(null);
+      setAnalysisRevision(null);
+      setAnalysisError('');
+      analysisDraftFingerprintRef.current = '';
+    }
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    const payload = buildPersistedDraft();
+    if (JSON.stringify(payload) === lastSavedFingerprintRef.current) return;
+    autosaveTimerRef.current = setTimeout(() => {
+      void persistPayload(payload).catch(() => undefined);
+    }, 800);
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+    // build helpers intentionally use this render's immutable draft snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, hydrated, step]);
 
   const transitionTo = (nextStep: number, direction: number) => {
     setDir(direction);
@@ -399,32 +650,39 @@ export function OnboardingScreen() {
   };
 
   const runAnalyze = async () => {
+    const ownerUserId = userId;
+    if (!ownerUserId) return;
     setAnalyzing(true);
+    setAnalysisError('');
+    const analyzedDraft = draft;
     try {
-      const result = await analyzeOnboardingProfile(supabase, { answers: buildAnswers(), basic: buildBasic() });
-      setAnalysis(result.analysis);
-      const review = result.analysis.aiReview;
-      setReviewEdits({
-        selfSummary: review.selfSummary ?? '',
-        seekingSummary: review.seekingSummary ?? '',
-        idealMatchSummary: review.idealMatchSummary ?? '',
-        avoidSummary: review.avoidSummary ?? '',
-        suggestedBio: review.suggestedBio ?? '',
+      const revision = await persistPayload(buildPersistedDraft(analyzedDraft, reviewStep));
+      const result = await analyzeOnboardingProfile(supabase, {
+        draftRevision: revision,
+        expectedUserId: ownerUserId,
       });
+      if (activeUserIdRef.current !== ownerUserId || revisionRef.current !== result.draftRevision) return;
+      setAnalysis(result.analysis);
+      setAnalysisRevision(result.analysisRevision);
+      analysisDraftFingerprintRef.current = JSON.stringify(analyzedDraft);
+      setReviewEdits(reviewFromAnalysis(result.analysis));
     } catch (error) {
-      Alert.alert('Chưa phân tích được hồ sơ', error instanceof Error ? error.message : 'Thử lại sau.');
-      transitionTo(reviewStep - 1, -1);
+      if (activeUserIdRef.current === ownerUserId) {
+        setAnalysisError(error instanceof Error ? error.message : 'Chưa phân tích được hồ sơ. Thử lại sau.');
+      }
     } finally {
-      setAnalyzing(false);
+      if (activeUserIdRef.current === ownerUserId) setAnalyzing(false);
     }
   };
 
   useEffect(() => {
-    if (step === reviewStep && !analysis && !analyzing) void runAnalyze();
+    if (hydrated && step === reviewStep && !analysis && !analyzing && !analysisError) void runAnalyze();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+  }, [analysisError, hydrated, step]);
 
   const pickAvatar = () => {
+    const ownerUserId = userId;
+    if (!ownerUserId) return;
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
       Alert.alert('Tải ảnh trên web', 'Tải ảnh đại diện hiện hỗ trợ trên bản web. Bạn có thể thêm ảnh sau trong hồ sơ.');
       return;
@@ -437,9 +695,17 @@ export function OnboardingScreen() {
       if (!file) return;
       setUploadingAvatar(true);
       uploadAvatar(file, file.name)
-        .then(url => setDraft(d => ({ ...d, avatarUrl: url })))
-        .catch(error => Alert.alert('Chưa tải được ảnh', error instanceof Error ? error.message : 'Thử lại sau.'))
-        .finally(() => setUploadingAvatar(false));
+        .then(url => {
+          if (activeUserIdRef.current === ownerUserId) setDraft(d => ({ ...d, avatarUrl: url }));
+        })
+        .catch(error => {
+          if (activeUserIdRef.current === ownerUserId) {
+            Alert.alert('Chưa tải được ảnh', error instanceof Error ? error.message : 'Thử lại sau.');
+          }
+        })
+        .finally(() => {
+          if (activeUserIdRef.current === ownerUserId) setUploadingAvatar(false);
+        });
     };
     input.click();
   };
@@ -454,6 +720,7 @@ export function OnboardingScreen() {
       if (!draft.school.trim()) return 'Chọn trường của bạn để tiếp tục.';
       if (!draft.majorLabel.trim()) return 'Chọn ngành học của bạn để tiếp tục.';
       if (draft.heightCm.trim() && Number.isNaN(Number.parseInt(draft.heightCm, 10))) return 'Chiều cao cần là một số hợp lệ.';
+      if (draft.heightCm.trim() && (Number.parseInt(draft.heightCm, 10) < 120 || Number.parseInt(draft.heightCm, 10) > 230)) return 'Chiều cao cần trong khoảng 120–230 cm.';
       return '';
     }
     if (index === 1) {
@@ -469,27 +736,48 @@ export function OnboardingScreen() {
   };
 
   const confirm = async () => {
-    if (!analysis) return;
+    const ownerUserId = userId;
+    if (!ownerUserId) return;
+    if (!analysis || !analysisRevision) return;
+    if (analysisDraftFingerprintRef.current !== JSON.stringify(draft)) {
+      setAnalysis(null);
+      setAnalysisRevision(null);
+      setAnalysisError('Câu trả lời đã thay đổi. F-Love cần phân tích lại trước khi lưu.');
+      return;
+    }
     setIsSaving(true);
     try {
-      const merged: AIProfileAnalysis = {
-        ...analysis,
-        publicProfile: { ...analysis.publicProfile, bio: reviewEdits.suggestedBio.trim() || analysis.publicProfile.bio },
-        aiReview: { ...analysis.aiReview, ...reviewEdits },
-      };
-      await confirmOnboardingProfile(supabase, { analysis: merged, basic: buildBasic(), answers: buildAnswers() });
-      await queryClient.invalidateQueries({ queryKey: ['profile'] });
+      const currentRevision = await persistPayload(buildPersistedDraft(draft, reviewStep));
+      if (activeUserIdRef.current !== ownerUserId) return;
+      if (currentRevision !== analysisRevision) {
+        setAnalysis(null);
+        setAnalysisRevision(null);
+        setAnalysisError('Bản nháp vừa được cập nhật. Vui lòng phân tích lại trước khi hoàn tất.');
+        return;
+      }
+      const result = await confirmOnboardingProfile(supabase, {
+        draftRevision: currentRevision,
+        analysisRevision,
+        reviewEdits,
+        expectedUserId: ownerUserId,
+      });
+      if (activeUserIdRef.current !== ownerUserId) return;
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      queryClient.setQueryData(profileKey, result.profile);
       setShowDone(true);
-      setTimeout(() => router.replace('/ai-picks'), 1700);
+      router.replace('/ai-picks');
     } catch (error) {
-      Alert.alert('Chưa lưu được hồ sơ', error instanceof Error ? error.message : 'Thử lại sau.');
-      setIsSaving(false);
+      if (activeUserIdRef.current === ownerUserId) {
+        Alert.alert('Chưa lưu được hồ sơ', error instanceof Error ? error.message : 'Thử lại sau.');
+      }
+    } finally {
+      if (activeUserIdRef.current === ownerUserId) setIsSaving(false);
     }
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     if (step === reviewStep) {
-      void confirm();
+      await confirm();
       return;
     }
     const message = validationForStep(step);
@@ -499,7 +787,12 @@ export function OnboardingScreen() {
       return;
     }
     setStepError('');
-    transitionTo(step + 1, 1);
+    try {
+      await persistPayload(buildPersistedDraft(draft, step + 1));
+      transitionTo(step + 1, 1);
+    } catch {
+      // The inline autosave error offers retry without discarding the current step.
+    }
   };
 
   const exitOnboarding = () => {
@@ -525,7 +818,20 @@ export function OnboardingScreen() {
     Animated.timing(progressAnim, { toValue: progress, duration: 550, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, [progress, progressAnim]);
 
-  if (profileQuery.isLoading) {
+  if ((profileQuery.isError && !profileQuery.data) || (persistedDraftQuery.isError && !persistedDraftQuery.data)) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <LinearGradient colors={gradients.brandSoft} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+        <View style={styles.loadError}>
+          <Text style={styles.loadErrorTitle}>Chưa tải được onboarding</Text>
+          <Text style={styles.loadErrorText}>F-Love chưa thể xác nhận bản nháp và hồ sơ hiện tại. Dữ liệu của bạn không bị xoá.</Text>
+          <Button onPress={() => { void profileQuery.refetch(); void persistedDraftQuery.refetch(); }}>Thử lại</Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (profileQuery.isLoading || persistedDraftQuery.isLoading || !hydrated) {
     return (
       <SafeAreaView style={styles.safe}>
         <LinearGradient colors={gradients.brandSoft} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -537,10 +843,10 @@ export function OnboardingScreen() {
   const current = stepMetas[step];
   const animTranslate = anim.interpolate({ inputRange: [0, 1], outputRange: [dir * 42, 0] });
   const modeLabel = isEditMode ? 'Cập nhật' : 'Onboarding';
-  const backDisabled = isSaving;
+  const backDisabled = isSaving || analyzing;
   const backLabel = step === 0 ? (isEditMode ? '✕ Thoát' : 'Đổi tài khoản') : '← Quay lại';
   const nextLabel = step === reviewStep ? 'Hoàn tất ✓' : 'Tiếp tục →';
-  const nextDisabled = isSaving || (step === reviewStep && (analyzing || !analysis));
+  const nextDisabled = isSaving || isAutosaving || (step === reviewStep && (analyzing || !analysis || !analysisRevision));
 
   const renderBody = () => {
     if (step === 0) {
@@ -653,6 +959,15 @@ export function OnboardingScreen() {
       );
     }
     // Review
+    if (analysisError && !analyzing) {
+      return (
+        <View style={styles.analysisErrorCard}>
+          <Text style={styles.loadErrorTitle}>Chưa phân tích được hồ sơ</Text>
+          <Text style={styles.loadErrorText}>{analysisError}</Text>
+          <Button onPress={() => { setAnalysisError(''); void runAnalyze(); }}>Phân tích lại</Button>
+        </View>
+      );
+    }
     if (analyzing || !analysis) {
       return (
         <View style={styles.reviewLoading}>
@@ -712,6 +1027,13 @@ export function OnboardingScreen() {
           </View>
           <View style={styles.body}>{renderBody()}</View>
           {stepError ? <Text style={styles.errorText}>{stepError}</Text> : null}
+          {autosaveError ? (
+            <Pressable accessibilityRole="button" onPress={() => void persistPayload(buildPersistedDraft()).catch(() => undefined)}>
+              <Text style={styles.errorText}>{autosaveError} · Chạm để thử lưu lại</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.autosaveText}>{isAutosaving ? 'Đang lưu bản nháp…' : draftRevision > 0 ? `Đã lưu bản nháp #${draftRevision}` : 'Bản nháp sẽ tự động được lưu'}</Text>
+          )}
         </Animated.View>
       </ScrollView>
 
@@ -755,6 +1077,9 @@ export function OnboardingScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadError: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
+  loadErrorTitle: { color: colors.text, fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  loadErrorText: { color: colors.muted, fontSize: 13.5, lineHeight: 20, textAlign: 'center', maxWidth: 420 },
   heart: { position: 'absolute', color: '#F4A668' },
 
   wideCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
@@ -838,12 +1163,14 @@ const styles = StyleSheet.create({
 
   reviewLoading: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 40 },
   reviewLoadingText: { color: colors.textSoft, fontSize: 14, fontWeight: '600' },
+  analysisErrorCard: { alignItems: 'center', gap: 12, padding: 20, borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, backgroundColor: colors.surface },
   reviewList: { gap: 12 },
   reviewCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: '#F0DDC6', borderRadius: radii.lg, padding: 14, gap: 8 },
   reviewCaption: { color: '#C2825F', fontSize: 11.5, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
   reviewHint: { color: colors.muted, fontSize: 12.5, lineHeight: 18, marginTop: 2 },
 
   errorText: { color: '#B42318', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 12 },
+  autosaveText: { color: colors.muted, fontSize: 11.5, lineHeight: 16, marginTop: 10, textAlign: 'right' },
 
   footer: { flexDirection: 'row', gap: 12, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border },
   footerWide: { borderTopColor: '#E3CBAE', borderStyle: 'dashed', paddingTop: 20 },

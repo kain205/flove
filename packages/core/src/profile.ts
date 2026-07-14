@@ -1,5 +1,6 @@
-import type { ProfileText, UserProfile } from './types';
-import { hasCompletedOnboarding } from './onboarding';
+import type { OnboardingDraftV2, ProfileText, UserProfile } from './types';
+
+export const PROFILE_COMPLETENESS_THRESHOLD = 75;
 
 export const INTERESTS = [
   'Coding', 'Gaming', 'Music', 'Photography', 'Travel',
@@ -32,7 +33,8 @@ export type ProfileRequirementId =
   | 'personalityTags'
   | 'datingGoals'
   | 'profileText'
-  | 'onboardingSignals';
+  | 'profileCompleteness'
+  | 'profileConfirmed';
 
 export interface ProfileReadinessRequirement {
   id: ProfileRequirementId;
@@ -56,6 +58,37 @@ export function normalizeProfileText(user: Partial<UserProfile>): ProfileText {
     conversationStyle: user.profileText?.conversationStyle ?? '',
     memorableThing: user.profileText?.memorableThing ?? '',
     relationshipIntent: user.profileText?.relationshipIntent ?? '',
+  };
+}
+
+/**
+ * Overlays canonical display/basic fields onto an older onboarding draft.
+ * Raw answers remain the source text for future analysis: a generated profile
+ * bio is not equivalent to the user's longer `self_text` answer.
+ */
+export function overlayProfileOnOnboardingDraft(
+  draft: OnboardingDraftV2,
+  profile: UserProfile,
+): OnboardingDraftV2 {
+  return {
+    ...draft,
+    basic: {
+      ...draft.basic,
+      name: profile.name,
+      age: profile.age || undefined,
+      gender: profile.gender ?? '',
+      genderText: profile.genderText ?? '',
+      lookingForGender: profile.lookingForGender ?? [],
+      heightCm: profile.heightCm ?? null,
+      school: profile.profileText.school ?? '',
+      majorLabel: profile.profileText.majorLabel ?? '',
+      major: profile.major,
+      campus: profile.campus,
+      avatarUrl: profile.avatarUrl,
+      agePrefMin: profile.agePref?.min ?? null,
+      agePrefMax: profile.agePref?.max ?? null,
+    },
+    answers: draft.answers,
   };
 }
 
@@ -96,14 +129,15 @@ export function getProfileReadiness(user: Partial<UserProfile>): ProfileReadines
     { id: 'personalityTags', isMet: (user.personalityTags?.length ?? 0) >= 1 },
     { id: 'datingGoals', isMet: (user.datingGoals?.length ?? 0) >= 1 },
     { id: 'profileText', isMet: signalCount >= 1 },
-    { id: 'onboardingSignals', isMet: hasCompletedOnboarding(user.aiSignals) },
+    { id: 'profileCompleteness', isMet: (user.profileCompleteness ?? 0) >= PROFILE_COMPLETENESS_THRESHOLD },
+    { id: 'profileConfirmed', isMet: user.profileConfirmed === true },
   ];
-  const completeness = calculateProfileCompleteness(user);
-  const isComplete = completeness >= 75
-    && requirements.find(requirement => requirement.id === 'age')?.isMet
-    && requirements.find(requirement => requirement.id === 'interests')?.isMet
-    && requirements.find(requirement => requirement.id === 'profileText')?.isMet
-    && requirements.find(requirement => requirement.id === 'onboardingSignals')?.isMet;
+  // Readiness is intentionally based only on the canonical columns written by the
+  // backend. Re-calculating it in a client or consulting legacy ai_signals caused
+  // confirmed users to be sent through onboarding again.
+  const completeness = Math.max(0, Math.min(100, Math.round(user.profileCompleteness ?? 0)));
+  const isComplete = user.profileConfirmed === true
+    && completeness >= PROFILE_COMPLETENESS_THRESHOLD;
 
   return {
     completeness,
@@ -112,4 +146,8 @@ export function getProfileReadiness(user: Partial<UserProfile>): ProfileReadines
     missing: requirements.filter(requirement => !requirement.isMet),
     signalCount,
   };
+}
+
+export function isProfileReady(user: Partial<UserProfile> | null | undefined): boolean {
+  return Boolean(user && getProfileReadiness(user).isComplete);
 }

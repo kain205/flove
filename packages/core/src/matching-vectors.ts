@@ -1,8 +1,30 @@
 // Pure, dependency-free matching math for the embedding pipeline.
-// Used by core tests and mirrored by the `generate-daily-matches` Edge Function (Deno).
-// Keep this free of platform APIs so it runs identically in Node, Deno, and the browser.
+// Vector-specific helpers for core tests. The shared scalar ranking equation lives in
+// matching-engine.ts and is imported directly by the Deno Edge Function.
 
 import type { AppearancePreference, Dealbreaker, Gender, MatchingSignals } from './types';
+import {
+  MATCH_WEIGHTS,
+  clamp01,
+  deterministicScoreComponents,
+  overlap,
+  recordSimilarity,
+  scoreFromComponents,
+  toCompatibilityScore,
+  type DatabaseMatchSimilarities,
+  type MatchScoreComponents,
+} from './matching-engine';
+
+export {
+  MATCH_WEIGHTS,
+  deterministicScoreComponents,
+  overlap,
+  recordSimilarity,
+  scoreFromComponents,
+  toCompatibilityScore,
+  type DatabaseMatchSimilarities,
+  type MatchScoreComponents,
+};
 
 export type Vector = number[] | null | undefined;
 
@@ -31,24 +53,6 @@ export interface MatchProfile {
   interests?: string[];
 }
 
-export const MATCH_WEIGHTS = {
-  mutualPreference: 0.24,
-  need: 0.18,
-  communication: 0.15,
-  lifestyle: 0.14,
-  values: 0.12,
-  selfSimilarity: 0.08,
-  appearance: 0.06,
-  novelty: 0.03,
-} as const;
-
-const NEUTRAL_GENDERS = new Set<Gender>(['other', 'prefer_not_to_show']);
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
-}
-
 /** Cosine similarity in 0..1 (negative similarities are clamped to 0). Safe on null/zero vectors. */
 export function cosine(a: Vector, b: Vector): number {
   if (!a || !b || a.length === 0 || a.length !== b.length) return 0;
@@ -65,21 +69,6 @@ export function cosine(a: Vector, b: Vector): number {
 }
 
 /** Overlap ratio of two string lists (Jaccard-ish, normalized by the larger list). */
-export function overlap(a: string[] = [], b: string[] = []): number {
-  if (a.length === 0 || b.length === 0) return 0;
-  const bSet = new Set(b);
-  const shared = a.filter(item => bSet.has(item)).length;
-  return shared / Math.max(a.length, b.length);
-}
-
-/** Similarity of two numeric records (1 - mean absolute difference over the union of keys). */
-export function recordSimilarity(a: Record<string, number> = {}, b: Record<string, number> = {}): number {
-  const keys = Array.from(new Set([...Object.keys(a), ...Object.keys(b)]));
-  if (keys.length === 0) return 0;
-  const distance = keys.reduce((sum, key) => sum + Math.abs((a[key] ?? 0) - (b[key] ?? 0)), 0) / keys.length;
-  return clamp01(1 - distance);
-}
-
 function communicationRecord(signals?: MatchingSignals | null): Record<string, number> {
   return signals?.communication ? { ...signals.communication } : {};
 }
@@ -109,7 +98,6 @@ export function mutualPreference(self: MatchProfile, candidate: MatchProfile, se
 function discoveryOk(viewer: MatchProfile, target: MatchProfile): boolean {
   const wants = viewer.lookingForGender ?? [];
   if (wants.length === 0) return true;
-  if (NEUTRAL_GENDERS.has(target.gender)) return true;
   if (wants.includes('everyone') || wants.includes('depends')) return true;
   return wants.includes(target.gender);
 }
@@ -131,13 +119,14 @@ export function heightHardCompatible(self: MatchProfile, candidate: MatchProfile
   const hp = self.appearancePreference?.heightPreference;
   if (!hp || hp.importance !== 'hard') return true;
   const h = candidate.heightCm;
-  if (h == null) return true; // unknown height never hard-excludes
+  const hasDirection = Boolean(hp.prefersTallerThanSelf || hp.prefersShorterThanSelf);
+  const hasConstraint = hp.minHeightCm != null || hp.maxHeightCm != null || hasDirection;
+  if (hasDirection && self.heightCm == null) return false;
+  if (h == null) return !hasConstraint;
   if (hp.minHeightCm != null && h < hp.minHeightCm) return false;
   if (hp.maxHeightCm != null && h > hp.maxHeightCm) return false;
-  if (self.heightCm != null) {
-    if (hp.prefersTallerThanSelf && h <= self.heightCm) return false;
-    if (hp.prefersShorterThanSelf && h >= self.heightCm) return false;
-  }
+  if (hp.prefersTallerThanSelf && h <= self.heightCm!) return false;
+  if (hp.prefersShorterThanSelf && h >= self.heightCm!) return false;
   return true;
 }
 
@@ -178,59 +167,23 @@ export function passesHardFilters(self: MatchProfile, candidate: MatchProfile): 
   );
 }
 
-// --- Soft scoring -----------------------------------------------------------
-
-function softDealbreakerPenalty(self: MatchProfile, candidate: MatchProfile): number {
-  const tokens = candidateTokens(candidate);
-  let penalty = 0;
-  const all = [...(self.dealbreakers ?? []), ...(self.appearancePreference?.physicalDealbreakers ?? [])];
-  for (const d of all) {
-    if (!tokens.has(d.trait.toLowerCase())) continue;
-    if (d.severity === 'medium') penalty += 0.15;
-    else if (d.severity === 'soft') penalty += 0.05;
-  }
-  return Math.min(penalty, 0.4);
-}
-
-function appearanceFit(self: MatchProfile, candidate: MatchProfile): number {
-  const pref = self.appearancePreference;
-  if (!pref || pref.importance === 'none') return 0;
-  const wanted = [...(pref.preferredStyleTags ?? []), ...(pref.preferredAppearanceVibeTags ?? [])];
-  const candidateLook = [...(candidate.signals?.vibeTags ?? []), ...(candidate.signals?.selfTraits ?? [])];
-  const weight = pref.importance === 'hard' ? 1 : pref.importance === 'medium' ? 0.7 : 0.4;
-  return clamp01(overlap(wanted, candidateLook) * weight);
-}
-
 /** Raw weighted compatibility in roughly [-0.4, 1]; map to a display score with `toCompatibilityScore`. */
 export function finalScore(self: MatchProfile, candidate: MatchProfile, selfVecs: VectorSet, candVecs: VectorSet): number {
+  const fallback = deterministicScoreComponents(self, candidate);
   const mutualPref = mutualPreference(self, candidate, selfVecs, candVecs);
   const needFit = cosine(selfVecs.need, candVecs.need) || overlap(self.signals?.intents ?? [], candidate.signals?.intents ?? []);
   const commFit = cosine(selfVecs.communication, candVecs.communication)
     || recordSimilarity(communicationRecord(self.signals), communicationRecord(candidate.signals));
   const lifestyleFit = cosine(selfVecs.lifestyle, candVecs.lifestyle)
     || recordSimilarity(self.signals?.lifestyle ?? {}, candidate.signals?.lifestyle ?? {});
-  const valuesFit = recordSimilarity(self.signals?.values ?? {}, candidate.signals?.values ?? {});
   const selfSim = cosine(selfVecs.self, candVecs.self) || overlap(self.interests ?? [], candidate.interests ?? []);
-  const appearance = appearanceFit(self, candidate);
-  const novelty = self.campus !== candidate.campus || self.major !== candidate.major ? 0.4 : 0.15;
-  const penalty = softDealbreakerPenalty(self, candidate);
 
-  return (
-    MATCH_WEIGHTS.mutualPreference * mutualPref
-    + MATCH_WEIGHTS.need * needFit
-    + MATCH_WEIGHTS.communication * commFit
-    + MATCH_WEIGHTS.lifestyle * lifestyleFit
-    + MATCH_WEIGHTS.values * valuesFit
-    + MATCH_WEIGHTS.selfSimilarity * selfSim
-    + MATCH_WEIGHTS.appearance * appearance
-    + MATCH_WEIGHTS.novelty * novelty
-    - penalty
-  );
-}
-
-/** Map a raw weighted score to the app's 45..96 display range. (`compatibilityLabel` lives in matching.ts.) */
-export function toCompatibilityScore(weighted: number, sameCampus = false): number {
-  const campusBoost = sameCampus ? 0.04 : 0;
-  const score = Math.round((0.45 + Math.max(0, weighted) * 0.5 + campusBoost) * 100);
-  return Math.max(45, Math.min(score, 96));
+  return scoreFromComponents({
+    ...fallback,
+    mutualPreference: mutualPref,
+    need: needFit,
+    communication: commFit,
+    lifestyle: lifestyleFit,
+    selfSimilarity: selfSim,
+  });
 }

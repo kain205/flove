@@ -13,17 +13,12 @@ export function subscribeToConversationInvalidations(
       schema: 'public',
       table: 'conversation_participants',
       filter: `user_id=eq.${userId}`,
-    }, () => {
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-    })
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'messages',
     }, payload => {
-      const row = payload.new as { conversation_id?: string };
-      void queryClient.invalidateQueries({ queryKey: ['messages', row.conversation_id] });
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      const row = (payload.new ?? payload.old) as { conversation_id?: string };
+      void queryClient.invalidateQueries({ queryKey: ['conversations', userId] });
+      if (row.conversation_id) {
+        void queryClient.invalidateQueries({ queryKey: ['messages', userId, row.conversation_id] });
+      }
     })
     .subscribe();
 }

@@ -1,11 +1,68 @@
-import type { PreferenceProfile, PublicProfile } from './types';
+import type { ProfileRequirementId } from './profile';
+import type { ApiFailure, DailyMatchBatch, PreferenceProfile, PublicProfile } from './types';
+import { compatibilityLabel } from './matching-engine';
+
+export { compatibilityLabel };
 
 export const DAILY_PICK_LIMIT = 5;
 export const MIN_DAILY_PICK_TARGET = 3;
+export const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+export const MATCH_ALGORITHM_VERSION = 'deterministic-v2';
 
+export type EmptyDailyMatchesReason = 'no_eligible_candidates' | 'all_recently_seen';
+
+export type DailyMatchesResult =
+  | {
+      status: 'ready';
+      businessDate: string;
+      batch: DailyMatchBatch;
+      source: 'cached' | 'generated';
+    }
+  | {
+      status: 'processing';
+      businessDate: string;
+      retryAfterMs: number;
+    }
+  | {
+      status: 'empty';
+      businessDate: string;
+      reason: EmptyDailyMatchesReason;
+      retryAfterAt: string;
+    }
+  | {
+      status: 'needs_onboarding';
+      missing: ProfileRequirementId[];
+    };
+
+export function isApiFailure(value: unknown): value is ApiFailure {
+  if (!value || typeof value !== 'object') return false;
+  const failure = value as Partial<ApiFailure>;
+  return failure.ok === false
+    && Boolean(failure.error)
+    && typeof failure.error?.code === 'string'
+    && typeof failure.error?.message === 'string'
+    && typeof failure.error?.retryable === 'boolean'
+    && typeof failure.error?.requestId === 'string';
+}
+
+/**
+ * Calendar date owned by the backend for all daily product semantics.
+ * `formatToParts` avoids relying on locale-specific formatted output.
+ */
+export function businessDateKey(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+/** @deprecated Daily batches use `businessDateKey` and must be resolved by the backend. */
 export function localDateKey(date = new Date()): string {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
+  return businessDateKey(date);
 }
 
 export function batchIdFor(uid: string, date: string): string {
@@ -52,13 +109,6 @@ export function scoreCandidate(
   });
 
   return Math.max(45, Math.min(score, 96));
-}
-
-export function compatibilityLabel(score: number): string {
-  if (score >= 86) return 'Rất hợp về ý định';
-  if (score >= 74) return 'Tiềm năng mạnh';
-  if (score >= 64) return 'Đáng khám phá';
-  return 'Góc nhìn mới';
 }
 
 export function buildFallbackReason(self: PublicProfile | null, candidate: PublicProfile): string {

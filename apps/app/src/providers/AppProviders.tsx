@@ -41,7 +41,16 @@ function injectWebFonts() {
 }
 
 export function AppProviders({ children }: PropsWithChildren) {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        // Expensive workflows opt out entirely; ordinary reads get one transient retry.
+        retry: 1,
+        refetchOnReconnect: true,
+      },
+      mutations: { retry: false },
+    },
+  }));
 
   useEffect(() => {
     injectWebFonts();

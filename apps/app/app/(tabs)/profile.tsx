@@ -8,16 +8,28 @@ import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { MeterBar } from '@/components/MeterBar';
 import { TextField } from '@/components/TextField';
-import { loadCurrentProfile, saveProfile } from '@/services/profile';
+import { loadCurrentProfile, profileQueryKey, saveProfile } from '@/services/profile';
 import { signOut } from '@/services/auth';
 import { colors, gradients, radii } from '@/theme';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function ProfileScreen() {
   const queryClient = useQueryClient();
-  const profileQuery = useQuery({ queryKey: ['profile'], queryFn: loadCurrentProfile });
+  const { session } = useAuth();
+  const profileKey = profileQueryKey(session?.user.id);
+  const profileQuery = useQuery({
+    queryKey: profileKey,
+    queryFn: () => loadCurrentProfile(session?.user.id),
+    enabled: Boolean(session),
+  });
   const profile = profileQuery.data;
   const [name, setName] = useState(profile?.name ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
+
+  useEffect(() => {
+    setName('');
+    setBio('');
+  }, [session?.user.id]);
 
   useEffect(() => {
     if (!profile) return;
@@ -36,7 +48,7 @@ export default function ProfileScreen() {
         datingGoals: profile?.datingGoals ?? [],
         preferredVibes: profile?.preferredVibes ?? [],
       });
-      await queryClient.invalidateQueries({ queryKey: ['profile'] });
+      await queryClient.invalidateQueries({ queryKey: profileKey });
       Alert.alert('Đã lưu', 'Hồ sơ đã được cập nhật.');
     } catch (error) {
       Alert.alert('Lưu thất bại', error instanceof Error ? error.message : 'Thử lại sau.');
@@ -103,6 +115,7 @@ export default function ProfileScreen() {
         </View>
 
         <Button variant="light" onPress={() => router.push('/onboarding?mode=edit')}>Cập nhật gu ghép đôi</Button>
+        <Button variant="light" onPress={() => router.push('/preference-chat')}>Trò chuyện để tinh chỉnh AI Picks</Button>
         <Button onPress={handleSave}>Lưu hồ sơ</Button>
         <Button variant="secondary" onPress={() => void signOut()}>Đăng xuất</Button>
       </ScrollView>

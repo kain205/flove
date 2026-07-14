@@ -1,17 +1,30 @@
-import { acceptCuratedMatch, generateDailyMatches, getTodayMatches, submitMatchFeedback } from '@flove/supabase';
+import { acceptCuratedMatch, ensureDailyMatches, submitMatchFeedback } from '@flove/supabase';
 import { supabase } from '@/lib/supabase';
+import type { MatchFeedbackDecision } from '@flove/core';
 
-export async function loadOrGenerateTodayMatches() {
-  const existing = await getTodayMatches(supabase);
-  if (existing && existing.matches.length > 0) return existing;
-  await generateDailyMatches(supabase);
-  return getTodayMatches(supabase);
+export function ensureTodayMatches(userId: string) {
+  return ensureDailyMatches(supabase, userId);
 }
 
-export function acceptPick(matchId: string) {
-  return acceptCuratedMatch(supabase, { matchId });
+export type PickDecision = Extract<MatchFeedbackDecision, 'accepted' | 'declined' | 'skipped' | 'reported'>;
+
+export function actOnPick(input: { matchId: string; decision: PickDecision; userId: string }) {
+  const idempotencyKey = `${input.matchId}:${input.decision}`;
+  if (input.decision === 'accepted') {
+    return acceptCuratedMatch(supabase, {
+      matchId: input.matchId,
+      idempotencyKey,
+      expectedUserId: input.userId,
+    });
+  }
+  return submitMatchFeedback(supabase, {
+    matchId: input.matchId,
+    decision: input.decision,
+    idempotencyKey,
+    expectedUserId: input.userId,
+  });
 }
 
-export function declinePick(matchId: string) {
-  return submitMatchFeedback(supabase, { matchId, decision: 'declined' });
-}
+export const acceptPick = (matchId: string, userId: string) => actOnPick({ matchId, decision: 'accepted', userId });
+export const declinePick = (matchId: string, userId: string) => actOnPick({ matchId, decision: 'declined', userId });
+export const skipPick = (matchId: string, userId: string) => actOnPick({ matchId, decision: 'skipped', userId });

@@ -24,29 +24,46 @@ additional_redirect_urls = [
   "https://flove.app/auth/reset-password"
 ]
 
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/before_user_created_require_fpt"
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
 [storage]
 enabled = true
 
 [functions.generate-daily-matches]
-verify_jwt = false
+verify_jwt = true
+
+[functions.ensure-daily-matches]
+verify_jwt = true
 
 [functions.analyze-onboarding-profile]
-verify_jwt = false
+verify_jwt = true
 
 [functions.confirm-onboarding-profile]
-verify_jwt = false
+verify_jwt = true
 
 [functions.submit-match-feedback]
-verify_jwt = false
+verify_jwt = true
 
 [functions.accept-curated-match]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-preference-chat-message]
-verify_jwt = false
+verify_jwt = true
 
 [functions.find-blind-date-partner]
-verify_jwt = false
+verify_jwt = true
 
 [functions.request-reveal]
+verify_jwt = true
+
+# Queue consumers authenticate with a dedicated worker secret inside the
+# function. They are never callable with an end-user JWT.
+[functions.process-ai-jobs]
 verify_jwt = false

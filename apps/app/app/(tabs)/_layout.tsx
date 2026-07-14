@@ -1,19 +1,20 @@
 import { Redirect, Tabs } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { getProfileReadiness } from '@flove/core';
+import { isProfileReady } from '@flove/core';
 import { MessageCircle, Shuffle, Sparkles, UserRound } from 'lucide-react-native';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { Button } from '@/components/Button';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/providers/AuthProvider';
-import { loadCurrentProfile } from '@/services/profile';
+import { loadCurrentProfile, profileQueryKey } from '@/services/profile';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
   const { session, isLoading } = useAuth();
   const profileQuery = useQuery({
-    queryKey: ['profile'],
-    queryFn: loadCurrentProfile,
+    queryKey: profileQueryKey(session?.user.id),
+    queryFn: () => loadCurrentProfile(session?.user.id),
     enabled: Boolean(session),
   });
 
@@ -22,7 +23,16 @@ export default function TabsLayout() {
   }
 
   if (!session) return <Redirect href="/login" />;
-  if (!profileQuery.data || !getProfileReadiness(profileQuery.data).isComplete) return <Redirect href="/onboarding" />;
+  if (profileQuery.isError && !profileQuery.data) {
+    return (
+      <View style={{ flex: 1, gap: 14, padding: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+        <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800', textAlign: 'center' }}>Chưa tải được hồ sơ</Text>
+        <Text style={{ color: colors.muted, textAlign: 'center' }}>F-Love không chuyển bạn về onboarding khi chưa xác định được trạng thái hồ sơ.</Text>
+        <Button onPress={() => void profileQuery.refetch()}>Thử lại</Button>
+      </View>
+    );
+  }
+  if (!isProfileReady(profileQuery.data)) return <Redirect href="/onboarding" />;
 
   return (
     <Tabs

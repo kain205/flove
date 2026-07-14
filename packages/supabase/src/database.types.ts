@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_job_registry: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          idempotency_key: string
+          job_type: string
+          msg_id: number | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          idempotency_key: string
+          job_type: string
+          msg_id?: number | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          idempotency_key?: string
+          job_type?: string
+          msg_id?: number | null
+          status?: string
+        }
+        Relationships: []
+      }
+      ai_rate_limit_buckets: {
+        Row: {
+          request_count: number
+          scope: string
+          updated_at: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          request_count?: number
+          scope: string
+          updated_at?: string
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          request_count?: number
+          scope?: string
+          updated_at?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       blind_date_queue: {
         Row: {
           masked_name: string
@@ -137,6 +188,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      candidate_pool_state: {
+        Row: {
+          revision: number
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          revision?: number
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          revision?: number
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       conversation_participants: {
         Row: {
@@ -311,27 +380,72 @@ export type Database = {
       }
       daily_match_batches: {
         Row: {
+          algorithm_version: string
+          attempt_count: number
+          candidate_pool_revision: number
+          claim_token: string | null
           created_at: string
           date: string
+          empty_reason: string | null
+          enriched_at: string | null
+          enrichment_error_code: string | null
+          enrichment_status: Database["public"]["Enums"]["match_enrichment_status"]
+          error_code: string | null
+          finalized_at: string | null
           generated_by: string
+          generation_started_at: string | null
           id: string
+          profile_revision: number
+          retry_after: string | null
+          status: Database["public"]["Enums"]["daily_match_batch_status"]
           target_count: number
+          updated_at: string
           user_id: string
         }
         Insert: {
+          algorithm_version?: string
+          attempt_count?: number
+          candidate_pool_revision?: number
+          claim_token?: string | null
           created_at?: string
           date: string
+          empty_reason?: string | null
+          enriched_at?: string | null
+          enrichment_error_code?: string | null
+          enrichment_status?: Database["public"]["Enums"]["match_enrichment_status"]
+          error_code?: string | null
+          finalized_at?: string | null
           generated_by?: string
+          generation_started_at?: string | null
           id: string
+          profile_revision?: number
+          retry_after?: string | null
+          status?: Database["public"]["Enums"]["daily_match_batch_status"]
           target_count?: number
+          updated_at?: string
           user_id: string
         }
         Update: {
+          algorithm_version?: string
+          attempt_count?: number
+          candidate_pool_revision?: number
+          claim_token?: string | null
           created_at?: string
           date?: string
+          empty_reason?: string | null
+          enriched_at?: string | null
+          enrichment_error_code?: string | null
+          enrichment_status?: Database["public"]["Enums"]["match_enrichment_status"]
+          error_code?: string | null
+          finalized_at?: string | null
           generated_by?: string
+          generation_started_at?: string | null
           id?: string
+          profile_revision?: number
+          retry_after?: string | null
+          status?: Database["public"]["Enums"]["daily_match_batch_status"]
           target_count?: number
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -357,6 +471,7 @@ export type Database = {
           created_at: string
           decision: Database["public"]["Enums"]["feedback_decision"]
           id: string
+          idempotency_key: string | null
           match_id: string
           note: string | null
           tags: string[]
@@ -367,6 +482,7 @@ export type Database = {
           created_at?: string
           decision: Database["public"]["Enums"]["feedback_decision"]
           id?: string
+          idempotency_key?: string | null
           match_id: string
           note?: string | null
           tags?: string[]
@@ -377,6 +493,7 @@ export type Database = {
           created_at?: string
           decision?: Database["public"]["Enums"]["feedback_decision"]
           id?: string
+          idempotency_key?: string | null
           match_id?: string
           note?: string | null
           tags?: string[]
@@ -420,6 +537,70 @@ export type Database = {
           },
         ]
       }
+      match_generation_attempts: {
+        Row: {
+          attempt_no: number
+          batch_id: string
+          candidate_count: number
+          duration_ms: number | null
+          error_code: string | null
+          finished_at: string | null
+          id: number
+          outcome: string
+          selected_count: number
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          attempt_no: number
+          batch_id: string
+          candidate_count?: number
+          duration_ms?: number | null
+          error_code?: string | null
+          finished_at?: string | null
+          id?: never
+          outcome?: string
+          selected_count?: number
+          started_at?: string
+          user_id: string
+        }
+        Update: {
+          attempt_no?: number
+          batch_id?: string
+          candidate_count?: number
+          duration_ms?: number | null
+          error_code?: string | null
+          finished_at?: string | null
+          id?: never
+          outcome?: string
+          selected_count?: number
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_generation_attempts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "daily_match_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_generation_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_generation_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           id: string
@@ -446,6 +627,7 @@ export type Database = {
       }
       messages: {
         Row: {
+          client_message_id: string | null
           content: string
           conversation_id: string
           created_at: string
@@ -454,6 +636,7 @@ export type Database = {
           sender_id: string
         }
         Insert: {
+          client_message_id?: string | null
           content: string
           conversation_id: string
           created_at?: string
@@ -462,6 +645,7 @@ export type Database = {
           sender_id?: string
         }
         Update: {
+          client_message_id?: string | null
           content?: string
           conversation_id?: string
           created_at?: string
@@ -559,25 +743,67 @@ export type Database = {
           },
         ]
       }
+      onboarding_drafts: {
+        Row: {
+          analysis: Json | null
+          analysis_revision: number | null
+          analysis_source: string | null
+          created_at: string
+          draft: Json
+          draft_revision: number
+          onboarding_version: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis?: Json | null
+          analysis_revision?: number | null
+          analysis_source?: string | null
+          created_at?: string
+          draft?: Json
+          draft_revision?: number
+          onboarding_version?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis?: Json | null
+          analysis_revision?: number | null
+          analysis_source?: string | null
+          created_at?: string
+          draft?: Json
+          draft_revision?: number
+          onboarding_version?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       preference_chat_messages: {
         Row: {
+          client_request_id: string | null
           content: string
           created_at: string
           id: string
+          request_payload: Json | null
           sender: string
           user_id: string
         }
         Insert: {
+          client_request_id?: string | null
           content: string
           created_at?: string
           id?: string
+          request_payload?: Json | null
           sender: string
           user_id: string
         }
         Update: {
+          client_request_id?: string | null
           content?: string
           created_at?: string
           id?: string
+          request_payload?: Json | null
           sender?: string
           user_id?: string
         }
@@ -659,6 +885,10 @@ export type Database = {
           dating_goals: string[]
           dealbreakers: Json
           email: string
+          embedding_error_code: string | null
+          embedding_revision: number
+          embedding_status: Database["public"]["Enums"]["embedding_job_status"]
+          embedding_updated_at: string | null
           gender: Database["public"]["Enums"]["gender"]
           gender_text: string | null
           height_cm: number | null
@@ -669,14 +899,18 @@ export type Database = {
           major: Database["public"]["Enums"]["major"]
           name: string
           need_vector: string | null
+          onboarding_answers: Json
           onboarding_source: Database["public"]["Enums"]["onboarding_source"]
+          onboarding_version: number
           personality_tags: string[]
           preference_vector: string | null
           preferred_vibes: string[]
           profile_completeness: number
           profile_confirmed: boolean
           profile_confirmed_at: string | null
+          profile_revision: number
           profile_text: Json
+          profile_upgrade_required: boolean
           self_vector: string | null
           updated_at: string
         }
@@ -695,6 +929,10 @@ export type Database = {
           dating_goals?: string[]
           dealbreakers?: Json
           email: string
+          embedding_error_code?: string | null
+          embedding_revision?: number
+          embedding_status?: Database["public"]["Enums"]["embedding_job_status"]
+          embedding_updated_at?: string | null
           gender?: Database["public"]["Enums"]["gender"]
           gender_text?: string | null
           height_cm?: number | null
@@ -705,14 +943,18 @@ export type Database = {
           major?: Database["public"]["Enums"]["major"]
           name?: string
           need_vector?: string | null
+          onboarding_answers?: Json
           onboarding_source?: Database["public"]["Enums"]["onboarding_source"]
+          onboarding_version?: number
           personality_tags?: string[]
           preference_vector?: string | null
           preferred_vibes?: string[]
           profile_completeness?: number
           profile_confirmed?: boolean
           profile_confirmed_at?: string | null
+          profile_revision?: number
           profile_text?: Json
+          profile_upgrade_required?: boolean
           self_vector?: string | null
           updated_at?: string
         }
@@ -731,6 +973,10 @@ export type Database = {
           dating_goals?: string[]
           dealbreakers?: Json
           email?: string
+          embedding_error_code?: string | null
+          embedding_revision?: number
+          embedding_status?: Database["public"]["Enums"]["embedding_job_status"]
+          embedding_updated_at?: string | null
           gender?: Database["public"]["Enums"]["gender"]
           gender_text?: string | null
           height_cm?: number | null
@@ -741,14 +987,18 @@ export type Database = {
           major?: Database["public"]["Enums"]["major"]
           name?: string
           need_vector?: string | null
+          onboarding_answers?: Json
           onboarding_source?: Database["public"]["Enums"]["onboarding_source"]
+          onboarding_version?: number
           personality_tags?: string[]
           preference_vector?: string | null
           preferred_vibes?: string[]
           profile_completeness?: number
           profile_confirmed?: boolean
           profile_confirmed_at?: string | null
+          profile_revision?: number
           profile_text?: Json
+          profile_upgrade_required?: boolean
           self_vector?: string | null
           updated_at?: string
         }
@@ -946,6 +1196,124 @@ export type Database = {
           is_mutual: boolean
         }[]
       }
+      archive_ai_job: { Args: { p_msg_id: number }; Returns: boolean }
+      claim_ai_rate_limit: {
+        Args: {
+          p_limit: number
+          p_scope: string
+          p_user_id: string
+          p_window_seconds: number
+        }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reset_at: string
+        }[]
+      }
+      claim_daily_match_batch: {
+        Args: {
+          p_algorithm_version?: string
+          p_stale_after_seconds?: number
+          p_user_id: string
+        }
+        Returns: {
+          attempt_count: number
+          batch_id: string
+          batch_status: Database["public"]["Enums"]["daily_match_batch_status"]
+          business_date: string
+          candidate_pool_revision: number
+          claim_token: string
+          missing_requirements: string[]
+          profile_revision: number
+          result: string
+          retry_after: string
+        }[]
+      }
+      confirm_onboarding_profile_atomic: {
+        Args: {
+          p_analysis_revision: number
+          p_draft_revision: number
+          p_profile: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      complete_daily_match_enrichment: {
+        Args: {
+          p_attempt_count: number
+          p_batch_id: string
+          p_error_code?: string
+          p_updates: Json
+        }
+        Returns: Database["public"]["Enums"]["match_enrichment_status"]
+      }
+      complete_profile_embedding_job: {
+        Args: {
+          p_error_code?: string
+          p_profile_revision: number
+          p_user_id: string
+          p_vectors: Json
+        }
+        Returns: boolean
+      }
+      delete_ai_job: { Args: { p_msg_id: number }; Returns: boolean }
+      enqueue_ai_job: {
+        Args: {
+          p_delay_seconds?: number
+          p_idempotency_key?: string
+          p_message: Json
+        }
+        Returns: number
+      }
+      fail_daily_match_batch: {
+        Args: {
+          p_batch_id: string
+          p_candidate_count?: number
+          p_claim_token: string
+          p_duration_ms?: number
+          p_error_code: string
+          p_retry_after_seconds?: number
+        }
+        Returns: {
+          batch_id: string
+          batch_status: Database["public"]["Enums"]["daily_match_batch_status"]
+          retry_after: string
+        }[]
+      }
+      finalize_daily_match_batch: {
+        Args: {
+          p_batch_id: string
+          p_candidate_count?: number
+          p_claim_token: string
+          p_duration_ms?: number
+          p_empty_reason?: string
+          p_empty_retry_seconds?: number
+          p_generated_by?: string
+          p_matches: Json
+          p_user_id: string
+        }
+        Returns: {
+          batch_id: string
+          batch_status: Database["public"]["Enums"]["daily_match_batch_status"]
+          business_date: string
+          enrichment_status: Database["public"]["Enums"]["match_enrichment_status"]
+          match_count: number
+        }[]
+      }
+      find_blind_date_partner_atomic: {
+        Args: { p_masked_name: string }
+        Returns: {
+          conversation_id: string
+          partner_masked_name: string
+          session_id: string
+          waiting: boolean
+        }[]
+      }
+      flove_business_date: { Args: never; Returns: string }
+      get_daily_match_rows_v2: {
+        Args: { p_batch_id: string; p_user_id: string }
+        Returns: Database["public"]["Tables"]["curated_matches"]["Row"][]
+      }
       get_match_candidates: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {
@@ -975,7 +1343,191 @@ export type Database = {
           self_vector: number[]
         }[]
       }
+      get_match_candidates_v2: {
+        Args: {
+          p_cooldown_days?: number
+          p_limit?: number
+          p_user_id: string
+        }
+        Returns: {
+          age: number
+          age_pref_max: number
+          age_pref_min: number
+          ai_profile_analysis: Json
+          appearance_preference: Json
+          avatar_url: string
+          bio: string
+          candidate_to_preference: number
+          campus: Database["public"]["Enums"]["campus"]
+          coarse_score: number
+          communication_similarity: number
+          dating_goals: string[]
+          dealbreakers: Json
+          feedback_affinity: number
+          gender: Database["public"]["Enums"]["gender"]
+          height_cm: number
+          id: string
+          interests: string[]
+          lifestyle_similarity: number
+          looking_for_gender: string[]
+          major: Database["public"]["Enums"]["major"]
+          name: string
+          need_similarity: number
+          personality_tags: string[]
+          preference_to_candidate: number
+          preferred_vibes: string[]
+          profile_completeness: number
+          profile_text: Json
+          self_similarity: number
+        }[]
+      }
+      get_match_filter_metrics: {
+        Args: { p_cooldown_days?: number; p_user_id: string }
+        Returns: Json
+      }
+      get_backend_v2_alerts: {
+        Args: never
+        Returns: {
+          code: string
+          observed_at: string
+          observed_value: number
+          severity: string
+          threshold_value: number
+        }[]
+      }
+      mark_profile_embedding_processing: {
+        Args: { p_profile_revision: number; p_user_id: string }
+        Returns: boolean
+      }
+      match_pair_live_eligible: {
+        Args: { p_candidate_id: string; p_user_id: string }
+        Returns: boolean
+      }
       pair_key_for: { Args: { a: string; b: string }; Returns: string }
+      read_ai_jobs: {
+        Args: { p_batch_size?: number; p_visibility_timeout?: number }
+        Returns: {
+          enqueued_at: string
+          message: Json
+          msg_id: number
+          read_ct: number
+          vt: string
+        }[]
+      }
+      request_reveal_atomic: {
+        Args: { p_expected_user_id?: string; p_session_id: string }
+        Returns: {
+          accepted: boolean
+          is_revealed: boolean
+          partner_id: string | null
+          requested_by_me: boolean
+          requested_by_partner: boolean
+        }[]
+      }
+      get_blind_date_session: {
+        Args: { p_session_id: string }
+        Returns: {
+          conversation_id: string
+          is_revealed: boolean
+          partner_id: string | null
+          partner_masked_name: string
+          requested_by_me: boolean
+          requested_by_partner: boolean
+          session_id: string
+        }[]
+      }
+      get_blind_date_session_for_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          conversation_id: string
+          is_revealed: boolean
+          partner_id: string | null
+          partner_masked_name: string
+          requested_by_me: boolean
+          requested_by_partner: boolean
+          session_id: string
+        }[]
+      }
+      list_conversation_messages: {
+        Args: { p_conversation_id: string; p_limit?: number }
+        Returns: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          is_mine: boolean
+          is_read: boolean
+        }[]
+      }
+      mark_conversation_read: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          applied: boolean
+          conversation_id: string
+          marked_read_count: number
+          unread_count: number
+        }[]
+      }
+      save_onboarding_analysis: {
+        Args: {
+          p_analysis: Json
+          p_analysis_source?: string
+          p_draft_revision: number
+          p_user_id: string
+        }
+        Returns: { analysis: Json; analysis_revision: number }[]
+      }
+      save_onboarding_draft: {
+        Args: {
+          p_draft: Json
+          p_expected_revision?: number
+          p_expected_user_id?: string
+          p_onboarding_version?: number
+        }
+        Returns: Database["public"]["Tables"]["onboarding_drafts"]["Row"][]
+      }
+      save_preference_chat_turn_atomic: {
+        Args: {
+          p_assistant_content: string
+          p_content: string
+          p_hints: string[]
+          p_request_id: string
+        }
+        Returns: {
+          applied: boolean
+          assistant_message_id: string
+          user_message_id: string
+        }[]
+      }
+      send_message_atomic: {
+        Args: {
+          p_client_message_id: string
+          p_content: string
+          p_conversation_id: string
+          p_expected_user_id?: string
+        }
+        Returns: {
+          applied: boolean
+          created_at: string
+          message_id: string
+        }[]
+      }
+      submit_match_feedback_atomic: {
+        Args: {
+          p_decision: Database["public"]["Enums"]["feedback_decision"]
+          p_idempotency_key: string
+          p_match_id: string
+          p_note?: string
+          p_tags?: string[]
+        }
+        Returns: {
+          applied: boolean
+          conversation_id: string
+          is_mutual: boolean
+          match_id: string
+          status: Database["public"]["Enums"]["curated_match_status"]
+        }[]
+      }
     }
     Enums: {
       campus: "HCM" | "Hanoi" | "Danang" | "Cantho"
@@ -986,9 +1538,17 @@ export type Database = {
         | "skipped"
         | "reported"
         | "matched"
+      daily_match_batch_status: "generating" | "ready" | "empty" | "failed"
+      embedding_job_status: "pending" | "processing" | "ready" | "failed"
       feedback_decision: "accepted" | "declined" | "skipped" | "reported"
       gender: "male" | "female" | "other" | "prefer_not_to_show"
       major: "SE" | "AI" | "Biz" | "Design" | "Marketing"
+      match_enrichment_status:
+        | "pending"
+        | "processing"
+        | "ready"
+        | "failed"
+        | "skipped"
       match_source: "ai-curated" | "blind-date"
       moderation_event_type:
         | "report_created"
@@ -1141,9 +1701,18 @@ export const Constants = {
         "reported",
         "matched",
       ],
+      daily_match_batch_status: ["generating", "ready", "empty", "failed"],
+      embedding_job_status: ["pending", "processing", "ready", "failed"],
       feedback_decision: ["accepted", "declined", "skipped", "reported"],
       gender: ["male", "female", "other", "prefer_not_to_show"],
       major: ["SE", "AI", "Biz", "Design", "Marketing"],
+      match_enrichment_status: [
+        "pending",
+        "processing",
+        "ready",
+        "failed",
+        "skipped",
+      ],
       match_source: ["ai-curated", "blind-date"],
       moderation_event_type: [
         "report_created",

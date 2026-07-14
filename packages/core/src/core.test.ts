@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateProfileCompleteness,
+  businessDateKey,
   extractOnboardingSignals,
   getProfileReadiness,
   isFptEmail,
   localDateKey,
+  normalizeOnboardingDraft,
+  overlayProfileOnOnboardingDraft,
   pairKeyFor,
   scoreCandidate,
   type UserProfile,
@@ -26,6 +29,7 @@ const baseProfile: UserProfile = {
   profileText: { bio: 'Coffee and code' },
   profileCompleteness: 100,
   onboardingSource: 'manual',
+  profileConfirmed: true,
   aiSignals: {
     onboarding: {
       rawAnswers: [
@@ -67,7 +71,9 @@ describe('@flove/core', () => {
   it('calculates profile completeness and readiness', () => {
     expect(calculateProfileCompleteness(baseProfile)).toBe(100);
     expect(getProfileReadiness(baseProfile).isComplete).toBe(true);
-    expect(getProfileReadiness({ ...baseProfile, aiSignals: undefined }).isComplete).toBe(false);
+    expect(getProfileReadiness({ ...baseProfile, aiSignals: undefined }).isComplete).toBe(true);
+    expect(getProfileReadiness({ ...baseProfile, profileConfirmed: false }).isComplete).toBe(false);
+    expect(getProfileReadiness({ ...baseProfile, profileCompleteness: 74 }).isComplete).toBe(false);
   });
 
   it('extracts onboarding signals deterministically', () => {
@@ -90,12 +96,55 @@ describe('@flove/core', () => {
     expect(signals.confidence).toBeGreaterThan(0.3);
   });
 
+  it('normalizes onboarding v2 drafts at the trust boundary', () => {
+    const draft = normalizeOnboardingDraft({
+      version: 2,
+      step: 99,
+      basic: { name: '  An  ', age: 20, lookingForGender: ['female'] },
+      answers: [{ questionId: ' self_text ', value: '  Hello  ' }],
+    });
+    expect(draft).toMatchObject({
+      version: 2,
+      step: 6,
+      basic: { name: 'An', age: 20 },
+      answers: [{ questionId: 'self_text', value: 'Hello' }],
+    });
+    expect(normalizeOnboardingDraft({ version: 1 })).toBeNull();
+  });
+
+  it('overlays newer canonical profile edits without dropping preference answers', () => {
+    const merged = overlayProfileOnOnboardingDraft({
+      version: 2,
+      step: 4,
+      basic: { name: 'Old name', age: 19, campus: 'Hanoi' },
+      answers: [
+        { questionId: 'self_text', value: 'Old bio' },
+        { questionId: 'attraction_text', value: 'Keep this preference' },
+      ],
+    }, {
+      ...baseProfile,
+      name: 'New name',
+      age: 22,
+      bio: 'New bio',
+      profileText: { ...baseProfile.profileText, bio: 'New bio', school: 'FPT HCM' },
+    });
+
+    expect(merged.basic).toMatchObject({ name: 'New name', age: 22, campus: 'HCM', school: 'FPT HCM' });
+    expect(merged.answers).toContainEqual({ questionId: 'self_text', value: 'Old bio' });
+    expect(merged.answers).toContainEqual({ questionId: 'attraction_text', value: 'Keep this preference' });
+  });
+
   it('scores compatible candidates higher than the floor', () => {
     const candidate = { ...baseProfile, id: 'u2', name: 'B' };
     expect(scoreCandidate(baseProfile, candidate)).toBeGreaterThan(70);
   });
 
   it('formats local date keys', () => {
-    expect(localDateKey(new Date('2026-06-23T03:00:00.000Z'))).toMatch(/2026-06-(22|23)/);
+    expect(localDateKey(new Date('2026-06-23T03:00:00.000Z'))).toBe('2026-06-23');
+  });
+
+  it('uses the Vietnam business day at the UTC boundary', () => {
+    expect(businessDateKey(new Date('2026-06-22T16:59:59.999Z'))).toBe('2026-06-22');
+    expect(businessDateKey(new Date('2026-06-22T17:00:00.000Z'))).toBe('2026-06-23');
   });
 });

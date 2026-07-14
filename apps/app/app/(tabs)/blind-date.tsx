@@ -1,25 +1,37 @@
 import { useMutation } from '@tanstack/react-query';
+import { findBlindDatePartner } from '@flove/supabase';
+import { router } from 'expo-router';
 import { Alert, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
 import { colors, gradients, radii } from '@/theme';
 
-async function findBlindDatePartner() {
-  const { data, error } = await supabase.functions.invoke('find-blind-date-partner');
-  if (error) throw error;
-  return data as { waiting: boolean; conversationId?: string; partnerMaskedName?: string };
-}
-
 export default function BlindDateScreen() {
+  const { session } = useAuth();
+  const userId = session?.user.id ?? '';
   const mutation = useMutation({
-    mutationFn: findBlindDatePartner,
-    onSuccess: data => {
-      Alert.alert(
-        data.waiting ? 'Đang chờ' : 'Đã ghép đôi',
-        data.waiting ? 'Mình sẽ giữ bạn trong hàng chờ.' : `Người ghép: ${data.partnerMaskedName ?? 'Người ẩn danh'}`
-      );
+    mutationFn: (expectedUserId: string) => findBlindDatePartner(supabase, expectedUserId),
+    onSuccess: (data, expectedUserId) => {
+      if (expectedUserId !== userId) return;
+      if (data.waiting) {
+        Alert.alert('Đang chờ', 'Mình sẽ giữ bạn trong hàng chờ. Chạm lại để kiểm tra khi có người mới.');
+        return;
+      }
+      Alert.alert('Đã ghép đôi', `Người ghép: ${data.partnerMaskedName ?? 'Người ẩn danh'}`, [
+        {
+          text: 'Mở trò chuyện',
+          onPress: () => data.conversationId && router.push({
+            pathname: '/chat/[conversationId]',
+            params: { conversationId: data.conversationId, blindSessionId: data.sessionId },
+          }),
+        },
+      ]);
     },
-    onError: error => Alert.alert('Blind Date', error instanceof Error ? error.message : 'Thử lại sau.'),
+    onError: (error, expectedUserId) => {
+      if (expectedUserId !== userId) return;
+      Alert.alert('Blind Date', error instanceof Error ? error.message : 'Thử lại sau.');
+    },
   });
 
   return (
@@ -34,7 +46,7 @@ export default function BlindDateScreen() {
           <Text style={styles.heroBody}>
             Hệ thống tìm một người phù hợp đang online. Danh tính được giấu cho tới khi cả hai chọn tiết lộ.
           </Text>
-          <Pressable onPress={() => mutation.mutate()} disabled={mutation.isPending} style={styles.heroBtn}>
+          <Pressable onPress={() => userId && mutation.mutate(userId)} disabled={!userId || mutation.isPending} style={styles.heroBtn}>
             <Text style={styles.heroBtnText}>{mutation.isPending ? 'Đang tìm...' : 'Tìm người ghép'}</Text>
           </Pressable>
         </LinearGradient>

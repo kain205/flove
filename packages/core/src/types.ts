@@ -100,6 +100,13 @@ export interface UserProfile {
   dealbreakers?: Dealbreaker[];
   aiProfileAnalysis?: AIProfileAnalysis | null;
   profileConfirmed?: boolean;
+  /** Canonical onboarding answers persisted by onboarding v2. */
+  onboardingAnswers?: OnboardingAnswerInput[];
+  onboardingVersion?: number;
+  profileRevision?: number;
+  embeddingRevision?: number | null;
+  embeddingStatus?: EmbeddingStatus;
+  profileUpgradeRequired?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -265,6 +272,68 @@ export interface AIProfileAnalysis {
   publicProfile: AIProfilePublicFields;
   matchingSignals: MatchingSignals;
   aiReview: AIProfileReview;
+}
+
+// --- Onboarding v2 ---------------------------------------------------------
+
+export const ONBOARDING_VERSION = 2 as const;
+
+export interface OnboardingAnswerInput {
+  questionId: string;
+  value: string | string[];
+}
+
+export interface OnboardingBasicInput {
+  name?: string;
+  age?: number;
+  gender?: string;
+  genderText?: string;
+  lookingForGender?: string[];
+  heightCm?: number | null;
+  school?: string;
+  majorLabel?: string;
+  major?: string;
+  campus?: string;
+  avatarUrl?: string;
+  agePrefMin?: number | null;
+  agePrefMax?: number | null;
+}
+
+/** Server-persisted draft. The opaque UI fields are represented by basic + raw answers. */
+export interface OnboardingDraftV2 {
+  version: typeof ONBOARDING_VERSION;
+  step: number;
+  basic: OnboardingBasicInput;
+  answers: OnboardingAnswerInput[];
+}
+
+export interface OnboardingReviewEdits {
+  selfSummary: string;
+  seekingSummary: string;
+  idealMatchSummary: string;
+  avoidSummary: string;
+  suggestedBio: string;
+}
+
+export interface PersistedOnboardingDraft {
+  draft: OnboardingDraftV2;
+  draftRevision: number;
+  analysis: AIProfileAnalysis | null;
+  analysisRevision: number | null;
+  updatedAt: Date;
+}
+
+export type EmbeddingStatus = 'pending' | 'processing' | 'ready' | 'failed';
+
+export interface ApiFailure {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    retryable: boolean;
+    requestId: string;
+  };
+  retryAfterMs?: number;
 }
 
 /** Default empty preference object — convenient for building partial analyses. */

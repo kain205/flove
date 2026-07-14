@@ -1,26 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, ImageBackground, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Image, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell, Coffee, Heart, MessageCircle, RotateCcw, Sparkles, Star, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Bell, Coffee, Flag, Heart, MessageCircle, RotateCcw, Sparkles, Star, X } from 'lucide-react-native';
 import { Chip } from '@/components/Chip';
 import { useCountUp } from '@/lib/useCountUp';
-import { acceptPick, declinePick, loadOrGenerateTodayMatches } from '@/services/matching';
+import { actOnPick, ensureTodayMatches } from '@/services/matching';
+import { useAuth } from '@/providers/AuthProvider';
 import { colors, gradientForKey, gradients, radii } from '@/theme';
 import type { CuratedMatch } from '@flove/core';
 
-const profilePhotos = [
-  require('../../../../image.png'),
-  require('../../../../image2.png'),
-  require('../../../../image3.png'),
-  require('../../../../image4.png'),
-];
+const MAX_PROCESSING_POLLS = 12;
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
-
-function profilePhotoFor(pickIndex: number) {
-  return profilePhotos[pickIndex % profilePhotos.length];
-}
 
 function subScores(score: number) {
   return {
@@ -63,22 +56,54 @@ function splitAiInsights(match: CuratedMatch) {
 }
 
 export default function AiPicksScreen() {
+  const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user.id ?? '';
   const queryClient = useQueryClient();
-  const [index, setIndex] = useState(0);
+  const [decidedIds, setDecidedIds] = useState<Set<string>>(() => new Set());
+  const [processingPolls, setProcessingPolls] = useState(0);
 
   const matchesQuery = useQuery({
-    queryKey: ['ai-picks', 'today'],
-    queryFn: loadOrGenerateTodayMatches,
-  });
-  const acceptMutation = useMutation({
-    mutationFn: acceptPick,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    queryKey: ['ai-picks', userId],
+    queryFn: () => ensureTodayMatches(userId),
+    enabled: Boolean(userId),
+    retry: false,
+    refetchInterval: query => {
+      const result = query.state.data;
+      if (result?.status !== 'processing' || processingPolls >= MAX_PROCESSING_POLLS) return false;
+      return Math.max(500, Math.min(result.retryAfterMs, 5_000));
     },
   });
-  const declineMutation = useMutation({ mutationFn: declinePick });
+  const actionMutation = useMutation({
+    mutationFn: actOnPick,
+    onSuccess: (_data, input) => {
+      if (input.userId !== userId) return;
+      setDecidedIds(previous => new Set(previous).add(input.matchId));
+      if (input.decision === 'accepted') {
+        void queryClient.invalidateQueries({ queryKey: ['conversations', userId] });
+      }
+    },
+  });
 
-  if (matchesQuery.isLoading) {
+  useEffect(() => {
+    setDecidedIds(new Set());
+    setProcessingPolls(0);
+  }, [userId]);
+
+  useEffect(() => {
+    if (matchesQuery.data?.status === 'processing' && matchesQuery.dataUpdatedAt > 0) {
+      setProcessingPolls(count => Math.min(count + 1, MAX_PROCESSING_POLLS));
+    } else if (matchesQuery.data?.status && matchesQuery.data.status !== 'processing') {
+      setProcessingPolls(0);
+    }
+  }, [matchesQuery.data?.status, matchesQuery.dataUpdatedAt]);
+
+  const retry = () => {
+    setProcessingPolls(0);
+    void matchesQuery.refetch();
+  };
+
+  if (matchesQuery.isLoading || !userId) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.loading}>
@@ -88,18 +113,64 @@ export default function AiPicksScreen() {
     );
   }
 
-  const matches = matchesQuery.data?.matches ?? [];
-  const current: CuratedMatch | undefined = matches[index];
-  const remaining = Math.max(0, matches.length - index);
+  if (matchesQuery.isError) {
+    return (
+      <StatusScreen
+        icon="⚠️"
+        title="Chưa tải được gợi ý"
+        body={matchesQuery.error instanceof Error ? matchesQuery.error.message : 'Đã có lỗi kết nối. Dữ liệu của bạn vẫn an toàn.'}
+        actionLabel="Thử lại"
+        onAction={retry}
+      />
+    );
+  }
 
-  const advance = () => setIndex(i => i + 1);
-  const onLike = () => {
-    if (current) acceptMutation.mutate(current.id);
-    advance();
-  };
-  const onSkip = () => {
-    if (current) declineMutation.mutate(current.id);
-    advance();
+  const result = matchesQuery.data;
+  if (!result) return <StatusScreen icon="⚠️" title="Chưa tải được gợi ý" body="Vui lòng thử lại." actionLabel="Thử lại" onAction={retry} />;
+  if (result.status === 'processing') {
+    const paused = processingPolls >= MAX_PROCESSING_POLLS;
+    return (
+      <StatusScreen
+        loading={!paused}
+        icon="✨"
+        title={paused ? 'Gợi ý đang mất nhiều thời gian hơn dự kiến' : 'Đang chuẩn bị AI Picks'}
+        body={paused ? 'Bạn có thể thử tải lại. Tiến trình trên server vẫn tiếp tục an toàn.' : 'Hệ thống đang chọn những hồ sơ phù hợp nhất cho bạn.'}
+        actionLabel={paused ? 'Kiểm tra lại' : undefined}
+        onAction={paused ? retry : undefined}
+      />
+    );
+  }
+  if (result.status === 'needs_onboarding') {
+    return (
+      <StatusScreen
+        icon="📝"
+        title="Hãy hoàn thiện hồ sơ"
+        body="AI Picks cần hồ sơ đã xác nhận và đủ thông tin để đưa ra gợi ý an toàn."
+        actionLabel="Tiếp tục hồ sơ"
+        onAction={() => router.replace('/onboarding')}
+      />
+    );
+  }
+  if (result.status === 'empty') {
+    return (
+      <StatusScreen
+        icon="🌱"
+        title="Chưa có gợi ý phù hợp"
+        body={result.reason === 'all_recently_seen'
+          ? 'Bạn đã xem các hồ sơ phù hợp gần đây. Hệ thống sẽ tự thử lại khi có lựa chọn mới.'
+          : 'Hiện chưa có hồ sơ vượt qua các tiêu chí an toàn và sở thích hai chiều. Hãy quay lại sau nhé.'}
+        actionLabel="Kiểm tra lại"
+        onAction={retry}
+      />
+    );
+  }
+
+  const matches = result.batch.matches.filter(match => match.status === 'pending' && !decidedIds.has(match.id));
+  const current: CuratedMatch | undefined = matches[0];
+  const remaining = matches.length;
+  const act = (decision: 'accepted' | 'declined' | 'skipped' | 'reported') => {
+    if (!current || actionMutation.isPending) return;
+    actionMutation.mutate({ matchId: current.id, decision, userId });
   };
 
   return (
@@ -119,25 +190,29 @@ export default function AiPicksScreen() {
           <PickCard
             key={current.id}
             match={current}
-            pickIndex={index}
-            onLike={onLike}
-            onSkip={onSkip}
-            busy={acceptMutation.isPending || declineMutation.isPending}
+            onLike={() => act('accepted')}
+            onSkip={() => act('skipped')}
+            onDecline={() => act('declined')}
+            onReport={() => Alert.alert(
+              'Báo cáo hồ sơ này?',
+              'Hồ sơ sẽ bị ẩn khỏi gợi ý của bạn. Đội ngũ an toàn sẽ xem xét báo cáo.',
+              [
+                { text: 'Hủy', style: 'cancel' },
+                { text: 'Báo cáo và ẩn', style: 'destructive', onPress: () => act('reported') },
+              ],
+            )}
+            busy={actionMutation.isPending}
+            actionError={actionMutation.isError
+              ? (actionMutation.error instanceof Error ? actionMutation.error.message : 'Chưa lưu được lựa chọn. Vui lòng thử lại.')
+              : undefined}
           />
         ) : (
           <View style={styles.empty}>
             <Text style={{ fontSize: 52, marginBottom: 14 }}>🎉</Text>
             <Text style={styles.emptyTitle}>Hết gợi ý hôm nay</Text>
             <Text style={styles.emptyBody}>
-              {matches.length === 0
-                ? 'Chưa có pick nào. Hãy hoàn thiện hồ sơ hoặc quay lại sau nhé.'
-                : 'Quay lại vào ngày mai để nhận batch mới, hoặc thử Blind Date nhé.'}
+              Bạn đã xử lý toàn bộ AI Picks hôm nay. Quay lại sau để nhận batch mới nhé.
             </Text>
-            {matches.length > 0 ? (
-              <Pressable onPress={() => setIndex(0)} style={styles.resetBtn}>
-                <Text style={styles.resetText}>Xem lại từ đầu</Text>
-              </Pressable>
-            ) : null}
           </View>
         )}
       </ScrollView>
@@ -145,18 +220,53 @@ export default function AiPicksScreen() {
   );
 }
 
+function StatusScreen({
+  icon,
+  title,
+  body,
+  loading,
+  actionLabel,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  body: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.statusPanel}>
+        {loading ? <ActivityIndicator color={colors.primary} style={styles.statusSpinner} /> : <Text style={styles.statusIcon}>{icon}</Text>}
+        <Text style={styles.emptyTitle}>{title}</Text>
+        <Text style={styles.emptyBody}>{body}</Text>
+        {actionLabel && onAction ? (
+          <Pressable onPress={onAction} style={styles.resetBtn}>
+            <Text style={styles.resetText}>{actionLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </SafeAreaView>
+  );
+}
+
 function PickCard({
   match,
-  pickIndex,
   onLike,
   onSkip,
+  onDecline,
+  onReport,
   busy,
+  actionError,
 }: {
   match: CuratedMatch;
-  pickIndex: number;
   onLike: () => void;
   onSkip: () => void;
+  onDecline: () => void;
+  onReport: () => void;
   busy: boolean;
+  actionError?: string;
 }) {
   const { candidate } = match;
   const school = candidate.profileText.school?.trim();
@@ -166,7 +276,12 @@ function PickCard({
   const initial = candidate.name.trim() ? Array.from(candidate.name.trim())[0].toUpperCase() : '?';
   const score = useCountUp(clamp(match.compatibilityScore));
   const insights = splitAiInsights(match);
-  const profilePhoto = profilePhotoFor(pickIndex);
+  const avatarUrl = candidate.avatarUrl.trim();
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl, match.id]);
 
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -191,7 +306,23 @@ function PickCard({
     <Animated.View style={[styles.pickShell, enterStyle]}>
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <ImageBackground source={profilePhoto} resizeMode="cover" style={styles.profilePhoto} imageStyle={styles.profilePhotoImage}>
+          <View style={styles.profilePhoto}>
+            <LinearGradient
+              colors={gradientForKey(candidate.id || candidate.name)}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.profilePhotoImage}
+            />
+            {avatarUrl && !imageFailed ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                resizeMode="cover"
+                style={styles.profilePhotoImage}
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <Text style={styles.ghostInitial}>{initial}</Text>
+            )}
             <LinearGradient
               colors={['rgba(37, 22, 11, 0.12)', 'rgba(193, 83, 11, 0.62)', 'rgba(116, 48, 13, 0.92)']}
               locations={[0, 0.58, 1]}
@@ -199,7 +330,7 @@ function PickCard({
               end={{ x: 0.8, y: 1 }}
               style={styles.photoOverlay}
             />
-          </ImageBackground>
+          </View>
           <LinearGradient
             colors={gradientForKey(candidate.id || candidate.name)}
             start={{ x: 0, y: 0 }}
@@ -218,7 +349,6 @@ function PickCard({
             <Text style={styles.scoreBadgeText}>{score}%</Text>
             <Text style={styles.scoreBadgeSub}>độ phù hợp</Text>
           </View>
-          <Text style={styles.ghostInitial}>{initial}</Text>
           <View style={styles.cardHeaderText}>
             <View style={styles.nameRow}>
               <Text style={styles.cardName}>
@@ -259,7 +389,7 @@ function PickCard({
               </View>
               <Text style={styles.actionLabel}>Bỏ qua</Text>
             </Pressable>
-            <Pressable onPress={onSkip} disabled={busy} style={styles.sideActionBtn}>
+            <Pressable onPress={onDecline} disabled={busy} style={styles.sideActionBtn}>
               <View style={styles.actionCircle}>
                 <X size={24} color="#E35B4C" />
               </View>
@@ -272,6 +402,13 @@ function PickCard({
               <Text style={styles.likeLabel}>Thích</Text>
             </Pressable>
           </View>
+
+          {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
+
+          <Pressable accessibilityRole="button" disabled={busy} onPress={onReport} style={styles.reportButton}>
+            <Flag color={colors.muted} size={14} />
+            <Text style={styles.reportButtonText}>Báo cáo và ẩn hồ sơ</Text>
+          </Pressable>
 
           <View style={styles.insightCard}>
             <View style={styles.insightHead}>
@@ -326,6 +463,9 @@ function PickCard({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  statusPanel: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34 },
+  statusIcon: { fontSize: 48, marginBottom: 14 },
+  statusSpinner: { marginBottom: 22 },
   header: {
     paddingHorizontal: 22,
     paddingTop: 8,
@@ -352,7 +492,7 @@ const styles = StyleSheet.create({
   },
   cardHeader: { aspectRatio: 0.76, justifyContent: 'flex-end', paddingHorizontal: 18, paddingTop: 18, paddingBottom: 48, overflow: 'hidden' },
   profilePhoto: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
-  profilePhotoImage: { width: '100%', height: '100%' },
+  profilePhotoImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%' },
   photoOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   colorWash: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0.24 },
   photoProgress: {
@@ -390,7 +530,16 @@ const styles = StyleSheet.create({
   },
   scoreBadgeText: { fontWeight: '800', fontSize: 17, color: colors.primaryText },
   scoreBadgeSub: { width: '100%', textAlign: 'center', fontSize: 10, fontWeight: '700', color: colors.textSoft, marginTop: -2 },
-  ghostInitial: { display: 'none' },
+  ghostInitial: {
+    position: 'absolute',
+    top: '32%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 88,
+    color: 'rgba(255,255,255,0.88)',
+    fontWeight: '800',
+  },
   cardHeaderText: { zIndex: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   cardName: { fontSize: 24, fontWeight: '800', color: colors.onPrimary },
@@ -494,6 +643,16 @@ const styles = StyleSheet.create({
   },
   likeBtn: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   likeLabel: { fontSize: 11.5, color: colors.primaryText, fontWeight: '800', textAlign: 'center' },
+  actionError: { color: '#B83D32', fontSize: 12.5, lineHeight: 18, textAlign: 'center', marginBottom: 12, fontWeight: '600' },
+  reportButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    marginBottom: 12,
+    paddingVertical: 6,
+  },
+  reportButtonText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
 
   empty: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 24 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 6 },

@@ -22,6 +22,36 @@ const notebookColumns = {
   preference_vector: null,
   communication_vector: null,
   lifestyle_vector: null,
+  onboarding_answers: [],
+  onboarding_version: 2,
+  profile_revision: 1,
+  profile_upgrade_required: false,
+  embedding_revision: 0,
+  embedding_status: 'pending' as const,
+  embedding_error_code: null,
+  embedding_updated_at: null,
+};
+
+const minimalProfileRow: ProfileRow = {
+  id: 'analysis-safety-user',
+  email: 'analysis-safety@fpt.edu.vn',
+  name: 'Analysis Safety',
+  age: 21,
+  major: 'SE',
+  campus: 'HCM',
+  avatar_url: '',
+  bio: 'Bio',
+  interests: ['Coding', 'Coffee', 'Music'],
+  personality_tags: ['Chill'],
+  dating_goals: ['Coffee dates'],
+  preferred_vibes: ['Deep talks'],
+  profile_text: { bio: 'Bio' },
+  profile_completeness: 100,
+  onboarding_source: 'manual',
+  ai_signals: {},
+  created_at: '2026-06-23T00:00:00.000Z',
+  updated_at: '2026-06-23T00:00:00.000Z',
+  ...notebookColumns,
 };
 
 describe('@flove/supabase mappers', () => {
@@ -106,5 +136,16 @@ describe('@flove/supabase mappers', () => {
     };
 
     expect(userProfileFromRow(row).aiSignals).toBeUndefined();
+  });
+
+  it('maps empty or partial AI analysis to null instead of an unsafe typed object', () => {
+    expect(userProfileFromRow({ ...minimalProfileRow, ai_profile_analysis: {} }).aiProfileAnalysis).toBeNull();
+    expect(userProfileFromRow({
+      ...minimalProfileRow,
+      ai_profile_analysis: {
+        aiReview: { seekingSummary: 'Partial legacy payload' },
+        publicProfile: {},
+      },
+    }).aiProfileAnalysis).toBeNull();
   });
 });

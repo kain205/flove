@@ -1,4 +1,18 @@
-import type { AIProfileAnalysis, AppearancePreference, CuratedMatch, DailyMatchBatch, Dealbreaker, Gender, PreferenceProfile, ProfileAiSignals, ProfileText, PublicProfile, UserProfile } from '@flove/core';
+import {
+  normalizeOnboardingAnswers,
+  type AIProfileAnalysis,
+  type AppearancePreference,
+  type CuratedMatch,
+  type DailyMatchBatch,
+  type Dealbreaker,
+  type EmbeddingStatus,
+  type Gender,
+  type PreferenceProfile,
+  type ProfileAiSignals,
+  type ProfileText,
+  type PublicProfile,
+  type UserProfile,
+} from '@flove/core';
 import type { Database } from './database.types';
 
 type CuratedMatchRow = Database['public']['Tables']['curated_matches']['Row'];
@@ -37,6 +51,46 @@ function jsonObject<T>(value: unknown): T | undefined {
   return value as T;
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string');
+}
+
+function aiProfileAnalysisFromJson(value: unknown): AIProfileAnalysis | undefined {
+  const analysis = record(value);
+  const publicProfile = record(analysis?.publicProfile);
+  const signals = record(analysis?.matchingSignals);
+  const review = record(analysis?.aiReview);
+  const appearance = record(signals?.appearancePreference);
+  if (!analysis || !publicProfile || !signals || !review || !appearance) return undefined;
+
+  const signalArrays = [
+    signals.intents,
+    signals.selfTraits,
+    signals.interests,
+    signals.vibeTags,
+    signals.preferredPartnerTraits,
+  ];
+  if (!signalArrays.every(stringArray) || !stringArray(publicProfile.conversationHooks)) return undefined;
+  if (!stringArray(appearance.preferredStyleTags) || !stringArray(appearance.preferredAppearanceVibeTags)) {
+    return undefined;
+  }
+  if (!Array.isArray(signals.dealbreakers)
+    || !signals.dealbreakers.every(item => typeof record(item)?.trait === 'string')) {
+    return undefined;
+  }
+  if (!['selfSummary', 'seekingSummary', 'idealMatchSummary', 'avoidSummary', 'suggestedBio']
+    .every(key => typeof review[key] === 'string')) {
+    return undefined;
+  }
+  return analysis as unknown as AIProfileAnalysis;
+}
+
 export function publicProfileFromRow(row: PublicProfileRow): PublicProfile {
   const bio = row.bio ?? '';
   return {
@@ -59,6 +113,7 @@ export function publicProfileFromRow(row: PublicProfileRow): PublicProfile {
 }
 
 export function userProfileFromRow(row: ProfileRow): UserProfile {
+  const extended = row as unknown as Record<string, unknown>;
   return {
     ...publicProfileFromRow(row),
     email: row.email,
@@ -71,8 +126,16 @@ export function userProfileFromRow(row: ProfileRow): UserProfile {
     agePref: { min: row.age_pref_min ?? null, max: row.age_pref_max ?? null },
     appearancePreference: jsonObject<AppearancePreference>(row.appearance_preference),
     dealbreakers: Array.isArray(row.dealbreakers) ? (row.dealbreakers as unknown as Dealbreaker[]) : [],
-    aiProfileAnalysis: jsonObject<AIProfileAnalysis>(row.ai_profile_analysis) ?? null,
+    aiProfileAnalysis: aiProfileAnalysisFromJson(row.ai_profile_analysis) ?? null,
     profileConfirmed: row.profile_confirmed ?? false,
+    onboardingAnswers: normalizeOnboardingAnswers(extended.onboarding_answers),
+    onboardingVersion: Number(extended.onboarding_version) || 1,
+    profileRevision: Number(extended.profile_revision) || 1,
+    embeddingRevision: extended.embedding_revision == null ? null : Number(extended.embedding_revision),
+    embeddingStatus: typeof extended.embedding_status === 'string'
+      ? extended.embedding_status as EmbeddingStatus
+      : undefined,
+    profileUpgradeRequired: extended.profile_upgrade_required === true,
     createdAt: toDate(row.created_at),
     updatedAt: toDate(row.updated_at),
   };

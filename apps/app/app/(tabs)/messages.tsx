@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
 import { colors } from '@/theme';
 
 type ConversationListRow = {
@@ -29,13 +30,33 @@ function shortId(id: string) {
 }
 
 export default function MessagesScreen() {
-  const query = useQuery({ queryKey: ['conversations'], queryFn: loadConversations });
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  const query = useQuery({
+    queryKey: ['conversations', userId],
+    queryFn: loadConversations,
+    enabled: Boolean(userId),
+  });
 
   if (query.isLoading) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.loading}>
           <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.errorState}>
+          <Text style={styles.errorTitle}>Chưa tải được tin nhắn</Text>
+          <Text style={styles.empty}>{query.error instanceof Error ? query.error.message : 'Vui lòng thử lại.'}</Text>
+          <Pressable onPress={() => void query.refetch()} style={styles.retryButton}>
+            <Text style={styles.retryText}>Thử lại</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -92,6 +113,10 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 12 },
   title: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   empty: { color: colors.muted, paddingHorizontal: 22, lineHeight: 21 },
+  errorState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  errorTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  retryButton: { borderRadius: 14, backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 11 },
+  retryText: { color: colors.onPrimary, fontWeight: '800' },
   list: { paddingHorizontal: 14, paddingBottom: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13, paddingHorizontal: 12, borderRadius: 18 },
   rowPressed: { backgroundColor: colors.surfaceTint },

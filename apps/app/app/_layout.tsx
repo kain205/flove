@@ -12,6 +12,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="auth/reset-password" />
         <Stack.Screen name="chat/[conversationId]" />
+        <Stack.Screen name="preference-chat" />
       </Stack>
     </AppProviders>
   );

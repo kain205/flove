@@ -1,23 +1,104 @@
-import { createServiceClient, jsonResponse, requireUser } from '../_shared/client.ts';
-import { DEFAULT_CHAT_MODEL, clampScore, structuredResponse } from '../_shared/openai.ts';
+import { createServiceClient, errorResponse, expectedUserFenceResponse, jsonObjectBody, jsonResponse, requireUser } from '../_shared/client.ts';
+import { kickAiWorker } from '../_shared/ai-jobs.ts';
 import {
   compatibilityLabel,
-  finalScore,
-  passesHardFilters,
+  deterministicScoreComponents,
+  scoreFromComponents,
   toCompatibilityScore,
-  type MatchProfile,
-  type VectorSet,
+  type DeterministicMatchProfile,
 } from '../_shared/scoring.ts';
 
-const fallbackGenerator = 'edge-vector-matching-v2';
-const candidatePoolLimit = 100;
+const algorithmVersion = 'deterministic-v2';
+const candidatePoolLimit = 120;
+const dailyPickLimit = 5;
+const processingRetryMs = 1_500;
+const emptyRetrySeconds = 15 * 60;
+const recentlySeenRetrySeconds = 60 * 60;
 
-function todayKey() {
-  return new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+type JsonObject = Record<string, any>;
+
+interface ClaimRow {
+  result: 'claimed' | 'cached' | 'processing' | 'empty' | 'needs_onboarding';
+  business_date: string;
+  batch_id: string;
+  batch_status: 'generating' | 'ready' | 'empty' | 'failed';
+  claim_token: string | null;
+  attempt_count: number;
+  retry_after: string | null;
+  missing_requirements: string[] | null;
 }
 
-function pairKeyFor(a: string, b: string) {
-  return [a, b].sort().join('_');
+type StageTimings = Record<string, number>;
+
+async function timed<T>(stages: StageTimings, stage: string, task: () => PromiseLike<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await task();
+  } finally {
+    stages[stage] = Date.now() - startedAt;
+  }
+}
+
+function firstRow<T>(data: T | T[] | null): T | null {
+  return Array.isArray(data) ? (data[0] ?? null) : data;
+}
+
+function finite(value: unknown): number {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function object(value: unknown): JsonObject {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : {};
+}
+
+function array(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : [];
+}
+
+function signalsFrom(row: JsonObject): JsonObject | null {
+  const analysis = object(row.ai_profile_analysis);
+  const signals = analysis.matchingSignals ?? analysis.matching_signals;
+  return signals && typeof signals === 'object' && !Array.isArray(signals) ? signals : null;
+}
+
+function scoringProfile(row: JsonObject): DeterministicMatchProfile {
+  return {
+    id: String(row.id),
+    campus: typeof row.campus === 'string' ? row.campus : undefined,
+    major: typeof row.major === 'string' ? row.major : undefined,
+    appearancePreference: object(row.appearance_preference),
+    dealbreakers: Array.isArray(row.dealbreakers) ? row.dealbreakers : [],
+    signals: signalsFrom(row),
+    interests: array(row.interests),
+  };
+}
+
+function mutualPreference(row: JsonObject): number | undefined {
+  const selfToCandidate = Math.max(0, finite(row.preference_to_candidate));
+  const candidateToSelf = Math.max(0, finite(row.candidate_to_preference));
+  if (selfToCandidate === 0 && candidateToSelf === 0) return undefined;
+  return Math.sqrt(selfToCandidate * candidateToSelf);
+}
+
+function publicSnapshot(row: JsonObject) {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? 'FPT Student'),
+    age: finite(row.age),
+    major: String(row.major ?? 'SE'),
+    campus: String(row.campus ?? 'HCM'),
+    gender: row.gender ?? null,
+    height_cm: row.height_cm ?? null,
+    avatar_url: String(row.avatar_url ?? ''),
+    bio: String(row.bio ?? ''),
+    interests: array(row.interests),
+    personality_tags: array(row.personality_tags),
+    dating_goals: array(row.dating_goals),
+    preferred_vibes: array(row.preferred_vibes),
+    profile_text: object(row.profile_text),
+    profile_completeness: finite(row.profile_completeness),
+  };
 }
 
 function campusLabel(campus: string) {
@@ -30,272 +111,447 @@ function campusLabel(campus: string) {
   return labels[campus] ?? campus;
 }
 
-function parseVector(value: unknown): number[] | null {
-  if (Array.isArray(value)) return value as number[];
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
+function fallbackInsights(self: JsonObject, candidate: JsonObject): string[] {
+  const insights: string[] = [];
+  const selfInterests = new Set(array(self.interests).map(item => item.toLocaleLowerCase()));
+  const shared = array(candidate.interests).filter(item => selfInterests.has(item.toLocaleLowerCase()));
+  if (shared.length > 0) insights.push(`Hai bạn cùng quan tâm ${shared.slice(0, 2).join(' và ')}, dễ bắt đầu câu chuyện tự nhiên.`);
+  if (self.campus === candidate.campus) insights.push(`Cùng học tại ${campusLabel(String(candidate.campus))}, thuận tiện để tìm hiểu ngoài đời.`);
+  const selfGoals = new Set(array(self.dating_goals));
+  const sharedGoals = array(candidate.dating_goals).filter(goal => selfGoals.has(goal));
+  if (sharedGoals.length > 0) insights.push(`Cả hai cùng hướng tới ${sharedGoals.slice(0, 2).join(' và ')}.`);
+  const vibes = array(candidate.preferred_vibes);
+  if (insights.length < 3 && vibes.length > 0) insights.push(`Vibe nổi bật của bạn ấy là ${vibes.slice(0, 2).join(' và ')}.`);
+  if (insights.length === 0) insights.push(`Hồ sơ của ${String(candidate.name ?? 'bạn ấy')} mang đến một góc nhìn mới đáng khám phá.`);
+  return insights.slice(0, 3);
 }
 
-function toMatchProfile(row: any): MatchProfile {
+function fallbackReason(self: JsonObject, candidate: JsonObject): string {
+  return fallbackInsights(self, candidate).map(reason => `✦ ${reason}`).join('\n');
+}
+
+function fallbackOpener(self: JsonObject, candidate: JsonObject): string {
+  const selfInterests = new Set(array(self.interests).map(item => item.toLocaleLowerCase()));
+  const shared = array(candidate.interests).find(item => selfInterests.has(item.toLocaleLowerCase()));
+  return shared
+    ? `Chào ${String(candidate.name ?? 'bạn')}, mình thấy tụi mình đều thích ${shared}. Bạn bắt đầu sở thích này từ khi nào vậy?`
+    : `Chào ${String(candidate.name ?? 'bạn')}, mình thấy hồ sơ của bạn khá thú vị. Tuần này của bạn có điều gì vui không?`;
+}
+
+function publicProfileFromSnapshot(value: unknown) {
+  const snapshot = object(value);
+  const bio = String(snapshot.bio ?? '');
   return {
-    id: row.id,
-    age: row.age,
-    gender: row.gender,
-    campus: row.campus,
-    major: row.major,
-    heightCm: row.height_cm ?? null,
-    lookingForGender: row.looking_for_gender ?? [],
-    agePrefMin: row.age_pref_min ?? null,
-    agePrefMax: row.age_pref_max ?? null,
-    appearancePreference: row.appearance_preference ?? row.ai_profile_analysis?.matchingSignals?.appearancePreference ?? null,
-    dealbreakers: row.dealbreakers ?? [],
-    signals: row.ai_profile_analysis?.matchingSignals ?? null,
-    interests: row.interests ?? [],
+    id: String(snapshot.id ?? ''),
+    name: String(snapshot.name ?? 'FPT Student'),
+    age: finite(snapshot.age),
+    major: String(snapshot.major ?? 'SE'),
+    campus: String(snapshot.campus ?? 'HCM'),
+    avatarUrl: String(snapshot.avatar_url ?? snapshot.avatarUrl ?? ''),
+    bio,
+    interests: array(snapshot.interests),
+    personalityTags: array(snapshot.personality_tags ?? snapshot.personalityTags),
+    datingGoals: array(snapshot.dating_goals ?? snapshot.datingGoals),
+    preferredVibes: array(snapshot.preferred_vibes ?? snapshot.preferredVibes),
+    profileText: { bio, ...object(snapshot.profile_text ?? snapshot.profileText) },
+    profileCompleteness: finite(snapshot.profile_completeness ?? snapshot.profileCompleteness),
+    gender: snapshot.gender ?? undefined,
+    heightCm: snapshot.height_cm ?? snapshot.heightCm ?? null,
   };
 }
 
-function toVectorSet(row: any): VectorSet {
+function curatedMatchFromRow(row: JsonObject) {
   return {
-    self: parseVector(row.self_vector),
-    need: parseVector(row.need_vector),
-    preference: parseVector(row.preference_vector),
-    communication: parseVector(row.communication_vector),
-    lifestyle: parseVector(row.lifestyle_vector),
+    id: String(row.id),
+    batchId: String(row.batch_id),
+    userId: String(row.user_id),
+    candidateId: String(row.candidate_id),
+    candidate: publicProfileFromSnapshot(row.candidate_snapshot),
+    pairKey: String(row.pair_key),
+    aiReason: String(row.ai_reason ?? ''),
+    suggestedOpener: row.suggested_opener ? String(row.suggested_opener) : undefined,
+    compatibilityLabel: String(row.compatibility_label ?? ''),
+    compatibilityScore: finite(row.compatibility_score),
+    status: String(row.status ?? 'pending'),
+    feedbackTags: array(row.feedback_tags),
+    feedbackNote: row.feedback_note ? String(row.feedback_note) : undefined,
+    createdAt: String(row.created_at),
+    decidedAt: row.decided_at ? String(row.decided_at) : undefined,
   };
 }
 
-function publicSnapshot(row: any) {
+async function loadReadyBatch(admin: any, userId: string, batchId: string) {
+  const [batchResult, matchesResult] = await Promise.all([
+    admin.from('daily_match_batches').select('*').eq('id', batchId).eq('user_id', userId).single(),
+    admin.rpc('get_daily_match_rows_v2', { p_user_id: userId, p_batch_id: batchId }),
+  ]);
+  const { data: batch, error: batchError } = batchResult;
+  if (batchError) throw batchError;
+  const { data: matches, error: matchesError } = matchesResult;
+  if (matchesError) throw matchesError;
+
   return {
-    id: row.id,
-    name: row.name,
-    age: row.age,
-    major: row.major,
-    campus: row.campus,
-    gender: row.gender,
-    height_cm: row.height_cm ?? null,
-    avatar_url: row.avatar_url,
-    bio: row.bio,
-    interests: row.interests ?? [],
-    personality_tags: row.personality_tags ?? [],
-    dating_goals: row.dating_goals ?? [],
-    preferred_vibes: row.preferred_vibes ?? [],
-    profile_text: row.profile_text ?? { bio: row.bio ?? '' },
-    profile_completeness: row.profile_completeness ?? 0,
+    id: String(batch.id),
+    userId: String(batch.user_id),
+    date: String(batch.date),
+    matches: (matches ?? []).map((row: JsonObject) => curatedMatchFromRow(row)),
+    createdAt: String(batch.created_at),
   };
 }
 
-function profileForAi(row: any) {
-  const review = row.ai_profile_analysis?.aiReview ?? {};
+async function loadEmptyResult(admin: any, userId: string, batchId: string, businessDate: string) {
+  const { data, error } = await admin
+    .from('daily_match_batches')
+    .select('empty_reason,retry_after')
+    .eq('id', batchId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
   return {
-    id: row.id,
-    name: row.name,
-    age: row.age,
-    school: row.profile_text?.school ?? campusLabel(row.campus),
-    major: row.profile_text?.majorLabel ?? row.major,
-    bio: row.bio ?? '',
-    interests: row.interests ?? [],
-    personalityTags: row.personality_tags ?? [],
-    datingGoals: row.dating_goals ?? [],
-    preferredVibes: row.preferred_vibes ?? [],
-    selfSummary: review.selfSummary ?? '',
-    seekingSummary: review.seekingSummary ?? '',
+    status: 'empty' as const,
+    businessDate,
+    reason: data?.empty_reason === 'all_recently_seen' ? 'all_recently_seen' : 'no_eligible_candidates',
+    retryAfterAt: String(data?.retry_after ?? new Date(Date.now() + emptyRetrySeconds * 1_000).toISOString()),
   };
 }
 
-function buildReasonBullets(self: any, candidate: any) {
-  const bullets: string[] = [];
-  const selfInterests = new Set(self.interests ?? []);
-  const shared = (candidate.interests ?? []).filter((i: string) => selfInterests.has(i));
-  if (shared.length > 0) {
-    bullets.push(`Hai bạn cùng quan tâm ${shared.slice(0, 3).join(', ')}, nên có điểm bắt chuyện tự nhiên.`);
-  }
-  if (self.campus === candidate.campus) {
-    bullets.push(`Cùng học tại ${campusLabel(candidate.campus)}, dễ giữ nhịp gặp gỡ và hiểu bối cảnh của nhau.`);
-  }
-  const sharedGoals = (candidate.dating_goals ?? []).filter((goal: string) => (self.dating_goals ?? []).includes(goal));
-  if (sharedGoals.length > 0) {
-    bullets.push(`Cả hai có tín hiệu cùng hướng tới ${sharedGoals.slice(0, 2).join(' và ')}.`);
-  }
-  if ((candidate.preferred_vibes ?? []).length > 0) {
-    bullets.push(`Vibe nổi bật của bạn ấy là ${(candidate.preferred_vibes ?? []).slice(0, 2).join(', ')}, hợp để khám phá nhẹ nhàng.`);
-  }
-  if (bullets.length === 0) {
-    bullets.push(`Hồ sơ của ${candidate.name} tạo một góc nhìn mới nhưng vẫn hợp với gu hiện tại của bạn.`);
-  }
-  return bullets.slice(0, 3);
+function retryDelay(retryAfter: string | null): number {
+  if (!retryAfter) return processingRetryMs;
+  const delay = new Date(retryAfter).getTime() - Date.now();
+  return Number.isFinite(delay) ? Math.max(500, Math.min(5_000, delay)) : processingRetryMs;
 }
 
-function buildReason(self: any, candidate: any) {
-  return buildReasonBullets(self, candidate).map(reason => `✦ ${reason}`).join('\n');
+function logOutcome(
+  requestId: string,
+  startedAt: number,
+  outcome: string,
+  fields: Record<string, unknown> = {},
+) {
+  console.log(JSON.stringify({
+    event: 'daily_matches_outcome',
+    requestId,
+    outcome,
+    durationMs: Date.now() - startedAt,
+    ...fields,
+  }));
 }
 
-const explanationSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['matches'],
-  properties: {
-    matches: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['candidateId', 'compatibilityScore', 'compatibilityLabel', 'aiReason', 'insightBullets', 'suggestedOpener'],
-        properties: {
-          candidateId: { type: 'string' },
-          compatibilityScore: { type: 'number' },
-          compatibilityLabel: { type: 'string' },
-          aiReason: { type: 'string' },
-          insightBullets: {
-            type: 'array',
-            minItems: 3,
-            maxItems: 3,
-            items: { type: 'string' },
-          },
-          suggestedOpener: { type: 'string' },
-        },
-      },
-    },
-  },
-};
+async function persistCompletedDuration(
+  admin: any,
+  batchId: string,
+  attemptCount: number,
+  durationMs: number,
+  requestId: string,
+) {
+  if (!Number.isSafeInteger(attemptCount) || attemptCount < 1) return;
+  const { error } = await admin
+    .from('match_generation_attempts')
+    .update({ duration_ms: Math.max(0, Math.min(2_147_483_647, durationMs)) })
+    .eq('batch_id', batchId)
+    .eq('attempt_no', attemptCount)
+    .in('outcome', ['ready', 'empty']);
+  if (error) {
+    console.error(JSON.stringify({
+      event: 'daily_matches_duration_persist_failed', requestId, batchId, code: error.code,
+    }));
+  }
+}
 
-const explanationSystemPrompt = [
-  'Bạn viết lời giải thích cho AI Picks của F-Love.',
-  'Hệ thống đã chọn sẵn các ứng viên — bạn KHÔNG được chọn lại, chỉ viết lý do và câu mở lời.',
-  'aiReason: 1 câu tiếng Việt ấm áp, nêu điểm hợp tổng quát, không nói phần trăm, không tiết lộ ghi chú riêng tư.',
-  'insightBullets: đúng 3 câu ngắn, mỗi câu một insight cụ thể: giá trị/ý định, sở thích/bối cảnh, phong cách giao tiếp/vibe.',
-  'Mỗi insightBullets dài tối đa 95 ký tự, viết tự nhiên, không dùng bullet marker, không nhắc dữ liệu nhạy cảm.',
-  'suggestedOpener: 1 câu mở lời tự nhiên, lịch sự để người dùng nhắn cho ứng viên.',
-  'Đây là gợi ý để khám phá, không phải match chính thức.',
-].join(' ');
-
-async function explainWithOpenAi(self: any, selected: Array<{ row: any; score: number }>) {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey || selected.length === 0) return null;
-  const model = Deno.env.get('OPENAI_MODEL') ?? DEFAULT_CHAT_MODEL;
-  const byId = new Map(selected.map(item => [item.row.id, item]));
-
-  const parsed = await structuredResponse({
-    apiKey,
-    model,
-    system: explanationSystemPrompt,
-    user: {
-      self: profileForAi(self),
-      matches: selected.map(({ row, score }) => ({ ...profileForAi(row), fallbackScore: score })),
-    },
-    schemaName: 'match_explanations',
-    schema: explanationSchema,
+function deferCompletedDuration(
+  admin: any,
+  batchId: string,
+  attemptCount: number,
+  durationMs: number,
+  requestId: string,
+) {
+  const task = persistCompletedDuration(
+    admin,
+    batchId,
+    attemptCount,
+    durationMs,
+    requestId,
+  ).catch((error: unknown) => {
+    console.error(JSON.stringify({
+      event: 'daily_matches_duration_persist_failed',
+      requestId,
+      batchId,
+      code: error instanceof Error ? error.name : 'unknown',
+    }));
   });
+  const edgeRuntime = (globalThis as typeof globalThis & {
+    EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void };
+  }).EdgeRuntime;
+  if (edgeRuntime) edgeRuntime.waitUntil(task);
+  else void task;
+}
 
-  const out = new Map<string, { score: number; label: string; reason: string; opener: string }>();
-  for (const match of parsed.matches ?? []) {
-    const item = byId.get(match.candidateId);
-    if (!item) continue;
-    const bullets = Array.isArray(match.insightBullets)
-      ? match.insightBullets.map((text: unknown) => String(text ?? '').trim()).filter(Boolean).slice(0, 3)
-      : [];
-    const reason = bullets.length >= 2
-      ? bullets.map((text: string) => `✦ ${text}`).join('\n')
-      : match.aiReason?.trim() || buildReason(self, item.row);
-    out.set(match.candidateId, {
-      score: clampScore(match.compatibilityScore, item.score),
-      label: match.compatibilityLabel?.trim() || compatibilityLabel(item.score),
-      reason,
-      opener: match.suggestedOpener?.trim() || '',
-    });
-  }
-  return out;
+function deferFilterMetrics(
+  admin: any,
+  userId: string,
+  requestId: string,
+  batchId: string,
+  always: boolean,
+) {
+  const configuredRate = Number(Deno.env.get('MATCH_METRICS_SAMPLE_RATE') ?? '0.05');
+  const sampleRate = Number.isFinite(configuredRate) ? Math.max(0, Math.min(1, configuredRate)) : 0.05;
+  if (!always && Math.random() >= sampleRate) return;
+
+  const task = admin.rpc('get_match_filter_metrics', {
+    p_user_id: userId,
+    p_cooldown_days: 30,
+  }).then(({ data, error }: { data: unknown; error: { code?: string } | null }) => {
+    if (error) {
+      console.error(JSON.stringify({ event: 'daily_matches_filter_metrics_failed', requestId, batchId, code: error.code }));
+      return;
+    }
+    console.log(JSON.stringify({
+      event: 'daily_matches_filter_funnel',
+      requestId,
+      batchId,
+      counts: data,
+    }));
+  }).catch((error: unknown) => {
+    console.error(JSON.stringify({
+      event: 'daily_matches_filter_metrics_failed',
+      requestId,
+      batchId,
+      code: error instanceof Error ? error.name : 'unknown',
+    }));
+  });
+  const edgeRuntime = (globalThis as typeof globalThis & {
+    EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void };
+  }).EdgeRuntime;
+  if (edgeRuntime) edgeRuntime.waitUntil(task);
+}
+
+async function failClaim(
+  admin: any,
+  batchId: string,
+  claimToken: string,
+  errorCode: string,
+  candidateCount: number,
+  startedAt: number,
+) {
+  await admin.rpc('fail_daily_match_batch', {
+    p_batch_id: batchId,
+    p_claim_token: claimToken,
+    p_error_code: errorCode,
+    p_retry_after_seconds: 60,
+    p_candidate_count: candidateCount,
+    p_duration_ms: Date.now() - startedAt,
+  });
 }
 
 Deno.serve(async req => {
-  const { user, response } = await requireUser(req);
+  const startedAt = Date.now();
+  const stagesMs: StageTimings = {};
+  const { user, requestId, response } = await timed(stagesMs, 'authenticate', () => requireUser(req));
   if (response) return response;
+  const body = await timed(stagesMs, 'validateRequest', () => jsonObjectBody(req));
+  const fenceResponse = expectedUserFenceResponse(body, user!.id, requestId);
+  if (fenceResponse) return fenceResponse;
   const admin = createServiceClient();
 
-  const body = await req.json().catch(() => ({}));
-  const date = typeof body.date === 'string' ? body.date : todayKey();
-  const batchId = `${user!.id}_${date}`;
-
-  const { data: existing } = await admin.from('daily_match_batches').select('id').eq('id', batchId).maybeSingle();
-  if (existing) return jsonResponse({ ok: true, batchId, reused: true });
-
-  const { data: self, error: selfError } = await admin.from('profiles').select('*').eq('id', user!.id).single();
-  if (selfError) return jsonResponse({ error: 'Complete your profile before AI Picks.' }, 412);
-  if (!self.profile_confirmed || (self.profile_completeness ?? 0) < 75) {
-    return jsonResponse({ error: 'Confirm your onboarding profile before AI Picks.' }, 412);
+  const { data: claimData, error: claimError } = await timed(stagesMs, 'claim', () =>
+    admin.rpc('claim_daily_match_batch', {
+      p_user_id: user!.id,
+      p_algorithm_version: algorithmVersion,
+      p_stale_after_seconds: 120,
+    }));
+  if (claimError) {
+    console.error(JSON.stringify({
+      event: 'daily_matches_claim_failed', requestId, code: claimError.code,
+      durationMs: Date.now() - startedAt, stagesMs,
+    }));
+    return errorResponse(requestId, 'matching_claim_failed', 'Không thể chuẩn bị gợi ý lúc này.', 503, true, 2_000);
   }
 
-  const { data: candidates, error: candidatesError } = await admin.rpc('get_match_candidates', {
-    p_user_id: user!.id,
-    p_limit: candidatePoolLimit,
-  });
-  if (candidatesError) return jsonResponse({ error: candidatesError.message }, 400);
+  const claim = firstRow(claimData) as ClaimRow | null;
+  if (!claim) return errorResponse(requestId, 'invalid_claim_result', 'Phản hồi matching không hợp lệ.', 500, true, 2_000);
 
-  const selfProfile = toMatchProfile(self);
-  const selfVecs = toVectorSet(self);
+  if (claim.result === 'needs_onboarding') {
+    logOutcome(requestId, startedAt, 'needs_onboarding', {
+      businessDate: claim.business_date,
+      missingCount: claim.missing_requirements?.length ?? 0,
+      stagesMs,
+    });
+    return jsonResponse({ status: 'needs_onboarding', missing: claim.missing_requirements ?? [] }, 200, requestId);
+  }
+  if (claim.result === 'processing') {
+    logOutcome(requestId, startedAt, 'processing', {
+      businessDate: claim.business_date, batchId: claim.batch_id, stagesMs,
+    });
+    return jsonResponse({ status: 'processing', businessDate: claim.business_date, retryAfterMs: retryDelay(claim.retry_after) }, 200, requestId);
+  }
+  if (claim.result === 'empty') {
+    try {
+      const result = await timed(stagesMs, 'load', () =>
+        loadEmptyResult(admin, user!.id, claim.batch_id, claim.business_date));
+      deferFilterMetrics(admin, user!.id, requestId, claim.batch_id, true);
+      logOutcome(requestId, startedAt, 'empty', {
+        businessDate: claim.business_date,
+        batchId: claim.batch_id,
+        source: 'cached',
+        reason: result.reason,
+        stagesMs,
+      });
+      return jsonResponse(result, 200, requestId);
+    } catch {
+      console.error(JSON.stringify({
+        event: 'daily_matches_empty_load_failed', requestId, batchId: claim.batch_id,
+        durationMs: Date.now() - startedAt, stagesMs,
+      }));
+      return errorResponse(requestId, 'matching_load_failed', 'Không thể tải trạng thái gợi ý.', 503, true, 1_500);
+    }
+  }
+  if (claim.result === 'cached') {
+    try {
+      const batch = await timed(stagesMs, 'load', () => loadReadyBatch(admin, user!.id, claim.batch_id));
+      logOutcome(requestId, startedAt, 'ready', {
+        businessDate: claim.business_date,
+        batchId: claim.batch_id,
+        source: 'cached',
+        matchCount: batch.matches.length,
+        stagesMs,
+      });
+      return jsonResponse({ status: 'ready', businessDate: claim.business_date, batch, source: 'cached' }, 200, requestId);
+    } catch {
+      console.error(JSON.stringify({
+        event: 'daily_matches_cached_load_failed', requestId, batchId: claim.batch_id,
+        durationMs: Date.now() - startedAt, stagesMs,
+      }));
+      return errorResponse(requestId, 'matching_load_failed', 'Không thể tải gợi ý đã tạo.', 503, true, 1_500);
+    }
+  }
 
-  const ranked = (candidates ?? [])
-    .map((row: any) => ({ row, profile: toMatchProfile(row), vecs: toVectorSet(row) }))
-    .filter((item: any) => passesHardFilters(selfProfile, item.profile))
-    .map((item: any) => ({
-      row: item.row,
-      score: toCompatibilityScore(finalScore(selfProfile, item.profile, selfVecs, item.vecs), self.campus === item.row.campus),
-    }))
-    .sort((a: any, b: any) => b.score - a.score)
-    .slice(0, 5);
+  if (!claim.claim_token) return errorResponse(requestId, 'missing_claim_token', 'Không thể khóa batch matching.', 500, true, 2_000);
 
-  let explanations: Map<string, { score: number; label: string; reason: string; opener: string }> | null = null;
-  let generatedBy = fallbackGenerator;
+  let candidateCount = 0;
   try {
-    explanations = await explainWithOpenAi(self, ranked);
-    if (explanations) generatedBy = `openai-${Deno.env.get('OPENAI_MODEL') ?? DEFAULT_CHAT_MODEL}`;
-  } catch (error) {
-    console.error('OpenAI explanation failed, using deterministic reasons.', error);
-  }
+    const [profileResult, candidatesResult] = await timed(stagesMs, 'candidates', () => Promise.all([
+      admin.from('profiles').select('id,campus,major,appearance_preference,dealbreakers,ai_profile_analysis,interests,dating_goals').eq('id', user!.id).single(),
+      admin.rpc('get_match_candidates_v2', { p_user_id: user!.id, p_limit: candidatePoolLimit, p_cooldown_days: 30 }),
+    ]));
+    if (profileResult.error) throw new Error(`self_profile:${profileResult.error.code ?? 'query_failed'}`);
+    if (candidatesResult.error) throw new Error(`candidates:${candidatesResult.error.code ?? 'query_failed'}`);
 
-  const selected = ranked.map(({ row, score }) => {
-    const enriched = explanations?.get(row.id);
-    return {
-      row,
-      score: enriched?.score ?? score,
-      compatibilityLabel: enriched?.label ?? compatibilityLabel(score),
-      aiReason: enriched?.reason ?? buildReason(self, row),
-      suggestedOpener: enriched?.opener ?? null,
-    };
-  });
+    const self = profileResult.data as JsonObject;
+    const selfProfile = scoringProfile(self);
+    const candidates = (candidatesResult.data ?? []) as JsonObject[];
+    candidateCount = candidates.length;
+    deferFilterMetrics(admin, user!.id, requestId, claim.batch_id, candidateCount === 0);
 
-  const { error: batchError } = await admin.from('daily_match_batches').insert({
-    id: batchId,
-    user_id: user!.id,
-    date,
-    target_count: selected.length,
-    generated_by: generatedBy,
-  });
-  if (batchError) return jsonResponse({ error: batchError.message }, 400);
+    let emptyReason: 'no_eligible_candidates' | 'all_recently_seen' | null = null;
+    if (candidateCount === 0) {
+      // The normal query includes the 30-day cooldown. A one-row no-history probe
+      // distinguishes a genuinely empty pool from candidates seen recently.
+      const { data: withoutHistory, error: probeError } = await timed(stagesMs, 'historyProbe', () =>
+        admin.rpc('get_match_candidates_v2', {
+          p_user_id: user!.id,
+          p_limit: 1,
+          p_cooldown_days: 0,
+        }));
+      if (probeError) throw new Error(`candidate_probe:${probeError.code ?? 'query_failed'}`);
+      emptyReason = (withoutHistory?.length ?? 0) > 0 ? 'all_recently_seen' : 'no_eligible_candidates';
+    }
 
-  if (selected.length > 0) {
-    const { error: matchesError } = await admin.from('curated_matches').insert(
-      selected.map(({ row, score, aiReason, compatibilityLabel: label, suggestedOpener }) => ({
-        id: `${batchId}_${row.id}`,
-        batch_id: batchId,
-        user_id: user!.id,
-        candidate_id: row.id,
-        candidate_snapshot: publicSnapshot(row),
-        pair_key: pairKeyFor(user!.id, row.id),
-        ai_reason: aiReason,
-        suggested_opener: suggestedOpener,
-        compatibility_label: label,
-        compatibility_score: score,
-      })),
+    const rankStartedAt = Date.now();
+    const ranked = candidates
+      .map(row => {
+        const candidate = scoringProfile(row);
+        const components = deterministicScoreComponents(selfProfile, candidate, {
+          mutualPreference: mutualPreference(row),
+          need: finite(row.need_similarity),
+          communication: finite(row.communication_similarity),
+          lifestyle: finite(row.lifestyle_similarity),
+          selfSimilarity: finite(row.self_similarity),
+          feedbackAdjustment: finite(row.feedback_affinity),
+        });
+        return {
+          row,
+          score: toCompatibilityScore(scoreFromComponents(components), self.campus === row.campus),
+          coarseScore: finite(row.coarse_score),
+        };
+      })
+      .sort((a, b) => b.score - a.score || b.coarseScore - a.coarseScore || String(a.row.id).localeCompare(String(b.row.id)))
+      .slice(0, dailyPickLimit);
+
+    const matches = ranked.map(({ row, score }) => ({
+      candidate_id: String(row.id),
+      candidate_snapshot: publicSnapshot(row),
+      ai_reason: fallbackReason(self, row),
+      compatibility_label: compatibilityLabel(score),
+      compatibility_score: score,
+      suggested_opener: fallbackOpener(self, row),
+    }));
+    stagesMs.rank = Date.now() - rankStartedAt;
+    emptyReason = matches.length === 0 ? (emptyReason ?? 'no_eligible_candidates') : null;
+
+    const { data: finalizeData, error: finalizeError } = await timed(stagesMs, 'finalize', () =>
+      admin.rpc('finalize_daily_match_batch', {
+        p_batch_id: claim.batch_id,
+        p_user_id: user!.id,
+        p_claim_token: claim.claim_token,
+        p_matches: matches,
+        p_generated_by: algorithmVersion,
+        p_empty_reason: emptyReason,
+        p_empty_retry_seconds: emptyReason === 'all_recently_seen' ? recentlySeenRetrySeconds : emptyRetrySeconds,
+        p_candidate_count: candidateCount,
+        p_duration_ms: Date.now() - startedAt,
+      }));
+    if (finalizeError) throw new Error(`finalize:${finalizeError.code ?? 'rpc_failed'}`);
+    const finalized = firstRow(finalizeData) as { batch_status?: string } | null;
+    if (matches.length > 0) kickAiWorker();
+
+    if (matches.length === 0) {
+      const result = await timed(stagesMs, 'load', () =>
+        loadEmptyResult(admin, user!.id, claim.batch_id, claim.business_date));
+      const completedDurationMs = Date.now() - startedAt;
+      deferCompletedDuration(
+        admin, claim.batch_id, Number(claim.attempt_count), completedDurationMs, requestId,
+      );
+      console.log(JSON.stringify({
+        event: 'daily_matches_generated', requestId, batchId: claim.batch_id,
+        outcome: finalized?.batch_status ?? 'empty', candidateCount, matchCount: 0,
+        algorithmVersion, durationMs: Date.now() - startedAt, stagesMs,
+      }));
+      logOutcome(requestId, startedAt, 'empty', {
+        businessDate: claim.business_date,
+        batchId: claim.batch_id,
+        source: 'generated',
+        reason: result.reason,
+        candidateCount,
+        stagesMs,
+      });
+      return jsonResponse(result, 200, requestId);
+    }
+    const batch = await timed(stagesMs, 'load', () => loadReadyBatch(admin, user!.id, claim.batch_id));
+    const completedDurationMs = Date.now() - startedAt;
+    deferCompletedDuration(
+      admin, claim.batch_id, Number(claim.attempt_count), completedDurationMs, requestId,
     );
-    if (matchesError) return jsonResponse({ error: matchesError.message }, 400);
+    console.log(JSON.stringify({
+      event: 'daily_matches_generated', requestId, batchId: claim.batch_id,
+      outcome: finalized?.batch_status ?? 'ready', candidateCount, matchCount: batch.matches.length,
+      algorithmVersion, durationMs: Date.now() - startedAt, stagesMs,
+    }));
+    logOutcome(requestId, startedAt, 'ready', {
+      businessDate: claim.business_date,
+      batchId: claim.batch_id,
+      source: 'generated',
+      candidateCount,
+      matchCount: batch.matches.length,
+      stagesMs,
+    });
+    return jsonResponse({ status: 'ready', businessDate: claim.business_date, batch, source: 'generated' }, 200, requestId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown';
+    const errorCode = message.split(':')[0] || 'generation_failed';
+    await failClaim(admin, claim.batch_id, claim.claim_token, errorCode, candidateCount, startedAt);
+    console.error(JSON.stringify({
+      event: 'daily_matches_generation_failed', requestId, batchId: claim.batch_id,
+      errorCode, candidateCount, durationMs: Date.now() - startedAt, stagesMs,
+    }));
+    return errorResponse(requestId, 'matching_generation_failed', 'Không thể tạo gợi ý lúc này. Vui lòng thử lại.', 503, true, 2_000);
   }
-
-  return jsonResponse({ ok: true, batchId, generatedBy, matchCount: selected.length });
 });
