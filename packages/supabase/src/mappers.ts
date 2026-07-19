@@ -3,7 +3,6 @@ import {
   type AIProfileAnalysis,
   type AppearancePreference,
   type CuratedMatch,
-  type DailyMatchBatch,
   type Dealbreaker,
   type EmbeddingStatus,
   type Gender,
@@ -16,7 +15,6 @@ import {
 import type { Database } from './database.types';
 
 type CuratedMatchRow = Database['public']['Tables']['curated_matches']['Row'];
-type DailyMatchBatchRow = Database['public']['Tables']['daily_match_batches']['Row'];
 type PreferenceProfileRow = Database['public']['Tables']['preference_profiles']['Row'];
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type PublicProfileRow = Database['public']['Views']['public_profiles']['Row'];
@@ -95,7 +93,7 @@ export function publicProfileFromRow(row: PublicProfileRow): PublicProfile {
   const bio = row.bio ?? '';
   return {
     id: row.id ?? '',
-    name: row.name ?? 'FPT Student',
+    name: row.name ?? 'Thành viên F-Love',
     age: row.age ?? 0,
     major: row.major ?? 'SE',
     campus: row.campus ?? 'HCM',
@@ -142,12 +140,16 @@ export function userProfileFromRow(row: ProfileRow): UserProfile {
 }
 
 export function preferenceProfileFromRow(row: PreferenceProfileRow): PreferenceProfile {
+  const extended = row as unknown as Record<string, unknown>;
   return {
     id: row.id,
     userId: row.user_id,
     summary: row.summary,
     hardFilters: row.hard_filters ?? [],
     softPreferences: row.soft_preferences ?? [],
+    softAvoidances: Array.isArray(extended.soft_avoidances)
+      ? extended.soft_avoidances.filter((item): item is string => typeof item === 'string')
+      : [],
     feedbackSummary: row.feedback_summary ?? [],
     updatedAt: toDate(row.updated_at),
   };
@@ -170,15 +172,5 @@ export function curatedMatchFromRow(row: CuratedMatchRow): CuratedMatch {
     feedbackNote: row.feedback_note ?? undefined,
     createdAt: toDate(row.created_at),
     decidedAt: row.decided_at ? toDate(row.decided_at) : undefined,
-  };
-}
-
-export function dailyMatchBatchFromRows(batch: DailyMatchBatchRow, matches: CuratedMatch[]): DailyMatchBatch {
-  return {
-    id: batch.id,
-    userId: batch.user_id,
-    date: batch.date,
-    matches,
-    createdAt: toDate(batch.created_at),
   };
 }

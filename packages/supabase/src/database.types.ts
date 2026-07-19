@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_assistant_requests: {
+        Row: {
+          claim_token: string
+          claimed_at: string
+          client_request_id: string
+          completed_at: string | null
+          expires_at: string | null
+          provider_started_at: string | null
+          request_fingerprint: string
+          response_payload: Json | null
+          scope: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          claim_token?: string
+          claimed_at?: string
+          client_request_id: string
+          completed_at?: string | null
+          expires_at?: string | null
+          provider_started_at?: string | null
+          request_fingerprint: string
+          response_payload?: Json | null
+          scope: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          claim_token?: string
+          claimed_at?: string
+          client_request_id?: string
+          completed_at?: string | null
+          expires_at?: string | null
+          provider_started_at?: string | null
+          request_fingerprint?: string
+          response_payload?: Json | null
+          scope?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_assistant_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_assistant_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_job_registry: {
         Row: {
           completed_at: string | null
@@ -64,6 +121,122 @@ export type Database = {
           window_start?: string
         }
         Relationships: []
+      }
+      ai_pick_product_config: {
+        Row: {
+          mode: Database["public"]["Enums"]["ai_pick_product_mode"]
+          price_vnd: number
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          mode?: Database["public"]["Enums"]["ai_pick_product_mode"]
+          price_vnd?: number
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          mode?: Database["public"]["Enums"]["ai_pick_product_mode"]
+          price_vnd?: number
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ai_pick_trial_claims: {
+        Row: {
+          batch_id: string
+          claimed_at: string
+          user_id: string
+        }
+        Insert: {
+          batch_id: string
+          claimed_at?: string
+          user_id: string
+        }
+        Update: {
+          batch_id?: string
+          claimed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_pick_trial_claims_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: true
+            referencedRelation: "daily_match_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_pick_trial_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_pick_trial_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_pick_unlock_ledger: {
+        Row: {
+          amount_vnd: number
+          batch_id: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          product_key: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          amount_vnd: number
+          batch_id: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          product_key?: string
+          source?: string
+          user_id: string
+        }
+        Update: {
+          amount_vnd?: number
+          batch_id?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          product_key?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_pick_unlock_ledger_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "daily_match_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_pick_unlock_ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_pick_unlock_ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       blind_date_queue: {
         Row: {
@@ -302,6 +475,7 @@ export type Database = {
           feedback_tags: string[]
           id: string
           pair_key: string
+          preview_id: string
           status: Database["public"]["Enums"]["curated_match_status"]
           suggested_opener: string | null
           user_id: string
@@ -319,6 +493,7 @@ export type Database = {
           feedback_tags?: string[]
           id: string
           pair_key: string
+          preview_id?: string
           status?: Database["public"]["Enums"]["curated_match_status"]
           suggested_opener?: string | null
           user_id: string
@@ -336,6 +511,7 @@ export type Database = {
           feedback_tags?: string[]
           id?: string
           pair_key?: string
+          preview_id?: string
           status?: Database["public"]["Enums"]["curated_match_status"]
           suggested_opener?: string | null
           user_id?: string
@@ -380,6 +556,8 @@ export type Database = {
       }
       daily_match_batches: {
         Row: {
+          access_assigned_at: string
+          access_state: Database["public"]["Enums"]["ai_pick_batch_access_state"]
           algorithm_version: string
           attempt_count: number
           candidate_pool_revision: number
@@ -399,10 +577,15 @@ export type Database = {
           retry_after: string | null
           status: Database["public"]["Enums"]["daily_match_batch_status"]
           target_count: number
+          teaser_preview_id: string | null
+          unlock_source: string | null
+          unlocked_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          access_assigned_at?: string
+          access_state?: Database["public"]["Enums"]["ai_pick_batch_access_state"]
           algorithm_version?: string
           attempt_count?: number
           candidate_pool_revision?: number
@@ -422,10 +605,15 @@ export type Database = {
           retry_after?: string | null
           status?: Database["public"]["Enums"]["daily_match_batch_status"]
           target_count?: number
+          teaser_preview_id?: string | null
+          unlock_source?: string | null
+          unlocked_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          access_assigned_at?: string
+          access_state?: Database["public"]["Enums"]["ai_pick_batch_access_state"]
           algorithm_version?: string
           attempt_count?: number
           candidate_pool_revision?: number
@@ -445,6 +633,9 @@ export type Database = {
           retry_after?: string | null
           status?: Database["public"]["Enums"]["daily_match_batch_status"]
           target_count?: number
+          teaser_preview_id?: string | null
+          unlock_source?: string | null
+          unlocked_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -829,6 +1020,7 @@ export type Database = {
           feedback_summary: string[]
           hard_filters: string[]
           id: string
+          soft_avoidances: string[]
           soft_preferences: string[]
           summary: string
           updated_at: string
@@ -838,6 +1030,7 @@ export type Database = {
           feedback_summary?: string[]
           hard_filters?: string[]
           id?: string
+          soft_avoidances?: string[]
           soft_preferences?: string[]
           summary?: string
           updated_at?: string
@@ -847,6 +1040,7 @@ export type Database = {
           feedback_summary?: string[]
           hard_filters?: string[]
           id?: string
+          soft_avoidances?: string[]
           soft_preferences?: string[]
           summary?: string
           updated_at?: string
@@ -1196,6 +1390,16 @@ export type Database = {
           is_mutual: boolean
         }[]
       }
+      abandon_ai_assistant_request: {
+        Args: {
+          p_claim_token: string
+          p_client_request_id: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_scope: string
+        }
+        Returns: boolean
+      }
       archive_ai_job: { Args: { p_msg_id: number }; Returns: boolean }
       assert_onboarding_draft_v2: {
         Args: { p_draft: Json }
@@ -1213,6 +1417,19 @@ export type Database = {
           allowed: boolean
           remaining: number
           reset_at: string
+        }[]
+      }
+      claim_ai_assistant_request: {
+        Args: {
+          p_client_request_id: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_scope: string
+        }
+        Returns: {
+          claim_token: string | null
+          request_status: string
+          response_payload: Json | null
         }[]
       }
       claim_daily_match_batch: {
@@ -1305,6 +1522,37 @@ export type Database = {
           match_count: number
         }[]
       }
+      finalize_ai_assistant_request: {
+        Args: {
+          p_claim_token: string
+          p_client_request_id: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_response_payload: Json
+          p_scope: string
+        }
+        Returns: {
+          request_status: string
+          response_payload: Json
+        }[]
+      }
+      finalize_preference_coach_request: {
+        Args: {
+          p_claim_token: string
+          p_client_request_id: string
+          p_content: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_response_payload: Json
+          p_update_memory: boolean
+        }
+        Returns: {
+          assistant_message_id: string
+          request_status: string
+          response_payload: Json
+          user_message_id: string
+        }[]
+      }
       find_blind_date_partner_atomic: {
         Args: { p_masked_name: string }
         Returns: {
@@ -1359,6 +1607,21 @@ export type Database = {
           session_id: string
         }[]
       }
+      get_conversation_wingman_context: {
+        Args: {
+          p_conversation_id: string
+          p_expected_user_id: string
+          p_limit?: number
+        }
+        Returns: {
+          eligibility_reason: string | null
+          eligible: boolean
+          is_anonymous: boolean
+          messages: Json
+          self_context: Json
+          user_age: number
+        }[]
+      }
       get_daily_match_rows_v2: {
         Args: { p_batch_id: string; p_user_id: string }
         Returns: {
@@ -1384,6 +1647,33 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      get_daily_picks_safe: {
+        Args: { p_batch_id: string; p_user_id: string }
+        Returns: {
+          access_state: string
+          ai_reason: string | null
+          batch_id: string
+          business_date: string
+          candidate_id: string | null
+          candidate_snapshot: Json | null
+          compatibility_label: string | null
+          compatibility_score: number | null
+          created_at: string | null
+          decided_at: string | null
+          feedback_note: string | null
+          feedback_tags: string[] | null
+          kind: string | null
+          locked_count: number
+          match_id: string | null
+          match_status: Database["public"]["Enums"]["curated_match_status"] | null
+          pair_key: string | null
+          preview_id: string | null
+          price_vnd: number
+          product_mode: string
+          suggested_opener: string | null
+          user_id: string | null
+        }[]
       }
       get_match_candidates: {
         Args: { p_limit?: number; p_user_id: string }
@@ -1448,9 +1738,55 @@ export type Database = {
           self_similarity: number
         }[]
       }
+      get_match_candidates_v2_without_avoidances: {
+        Args: { p_cooldown_days?: number; p_limit?: number; p_user_id: string }
+        Returns: {
+          age: number
+          age_pref_max: number
+          age_pref_min: number
+          ai_profile_analysis: Json
+          appearance_preference: Json
+          avatar_url: string
+          bio: string
+          campus: Database["public"]["Enums"]["campus"]
+          candidate_to_preference: number
+          coarse_score: number
+          communication_similarity: number
+          dating_goals: string[]
+          dealbreakers: Json
+          feedback_affinity: number
+          gender: Database["public"]["Enums"]["gender"]
+          height_cm: number
+          id: string
+          interests: string[]
+          lifestyle_similarity: number
+          looking_for_gender: string[]
+          major: Database["public"]["Enums"]["major"]
+          name: string
+          need_similarity: number
+          personality_tags: string[]
+          preference_to_candidate: number
+          preferred_vibes: string[]
+          profile_completeness: number
+          profile_text: Json
+          self_similarity: number
+        }[]
+      }
       get_match_filter_metrics: {
         Args: { p_cooldown_days?: number; p_user_id: string }
         Returns: Json
+      }
+      get_preference_coach_context: {
+        Args: { p_expected_user_id: string; p_limit?: number }
+        Returns: {
+          llm_eligible: boolean
+          preference_summary: string
+          profile_context: Json
+          recent_turns: Json
+          soft_avoidances: string[]
+          soft_preferences: string[]
+          user_age: number
+        }[]
       }
       jsonb_array_or_empty: { Args: { p_value: Json }; Returns: Json }
       jsonb_object_or_empty: { Args: { p_value: Json }; Returns: Json }
@@ -1464,6 +1800,16 @@ export type Database = {
           is_mine: boolean
           is_read: boolean
         }[]
+      }
+      mark_ai_assistant_provider_started: {
+        Args: {
+          p_claim_token: string
+          p_client_request_id: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_scope: string
+        }
+        Returns: boolean
       }
       mark_conversation_read: {
         Args: { p_conversation_id: string }
@@ -1533,6 +1879,10 @@ export type Database = {
           is_revealed: boolean
           reveal_requests: Json
         }[]
+      }
+      repair_daily_match_teaser: {
+        Args: { p_batch_id: string }
+        Returns: string | null
       }
       save_onboarding_analysis: {
         Args: {
@@ -1614,9 +1964,40 @@ export type Database = {
           status: Database["public"]["Enums"]["curated_match_status"]
         }[]
       }
+      submit_match_feedback_atomic_access_internal: {
+        Args: {
+          p_decision: Database["public"]["Enums"]["feedback_decision"]
+          p_idempotency_key: string
+          p_match_id: string
+          p_note?: string
+          p_tags?: string[]
+        }
+        Returns: {
+          applied: boolean
+          conversation_id: string
+          is_mutual: boolean
+          match_id: string
+          status: Database["public"]["Enums"]["curated_match_status"]
+        }[]
+      }
       text_array_overlap_ratio: {
         Args: { p_left: string[]; p_right: string[] }
         Returns: number
+      }
+      unlock_daily_match_batch: {
+        Args: {
+          p_batch_id: string
+          p_expected_user_id: string
+          p_idempotency_key: string
+        }
+        Returns: {
+          access_state: string
+          applied: boolean
+          batch_id: string
+          price_vnd: number
+          product_mode: string
+          unlock_source: string
+        }[]
       }
       vector_cosine_similarity: {
         Args: { p_left: string; p_right: string }
@@ -1624,6 +2005,8 @@ export type Database = {
       }
     }
     Enums: {
+      ai_pick_batch_access_state: "teaser" | "locked" | "unlocked"
+      ai_pick_product_mode: "open" | "stub"
       campus: "HCM" | "Hanoi" | "Danang" | "Cantho"
       curated_match_status:
         | "pending"
@@ -1786,6 +2169,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_pick_batch_access_state: ["teaser", "locked", "unlocked"],
+      ai_pick_product_mode: ["open", "stub"],
       campus: ["HCM", "Hanoi", "Danang", "Cantho"],
       curated_match_status: [
         "pending",

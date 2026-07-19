@@ -22,6 +22,7 @@ import {
   preferenceProfileQueryKey,
   sendPreferenceChat,
 } from '@/services/preferenceChat';
+import { loadCurrentProfile, profileQueryKey } from '@/services/profile';
 import { colors, radii } from '@/theme';
 
 const MAX_CONTENT_LENGTH = 2_000;
@@ -60,6 +61,12 @@ export default function PreferenceChatScreen() {
     queryFn: () => loadPreferenceChatMessages(userId),
     enabled: Boolean(userId),
   });
+  const profileQuery = useQuery({
+    queryKey: profileQueryKey(userId),
+    queryFn: () => loadCurrentProfile(userId),
+    enabled: Boolean(userId),
+  });
+  const isUnder18 = profileQuery.data?.age != null && profileQuery.data.age < 18;
 
   const mutation = useMutation({
     mutationFn: sendPreferenceChat,
@@ -121,8 +128,8 @@ export default function PreferenceChatScreen() {
             <ChevronLeft color={colors.primaryText} size={25} />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.title}>Tinh chỉnh AI Picks</Text>
-            <Text style={styles.subtitle}>Nói thêm về gu của bạn, bất cứ lúc nào.</Text>
+            <Text style={styles.title}>F-Love AI Coach</Text>
+            <Text style={styles.subtitle}>Hiểu gu của bạn để tinh chỉnh AI Picks.</Text>
           </View>
           <View style={styles.sparkle}>
             <Sparkles color={colors.primaryText} size={19} />
@@ -148,12 +155,21 @@ export default function PreferenceChatScreen() {
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
             showsVerticalScrollIndicator={false}
           >
+            {isUnder18 ? (
+              <View accessibilityRole="summary" style={styles.ageNotice}>
+                <Text style={styles.ageNoticeTitle}>Chế độ bảo vệ người dùng dưới 18 tuổi</Text>
+                <Text style={styles.ageNoticeBody}>
+                  Coach vẫn lưu các ưu tiên bạn tự mô tả, nhưng không gửi nội dung cho mô hình AI.
+                </Text>
+              </View>
+            ) : null}
+
             {(messagesQuery.data ?? []).length === 0 ? (
               <View style={styles.introCard}>
                 <Text style={styles.introIcon}>✨</Text>
-                <Text style={styles.introTitle}>Bạn muốn AI hiểu thêm điều gì?</Text>
+                <Text style={styles.introTitle}>Bạn muốn Coach hiểu thêm điều gì?</Text>
                 <Text style={styles.introBody}>
-                  Ví dụ: “Mình thích người chủ động, giao tiếp rõ ràng và thường đi cà phê cuối tuần.”
+                  Chia sẻ điều bạn ưu tiên, muốn tránh hoặc một thay đổi trong gu. Coach sẽ ghi nhớ để tinh chỉnh các lượt AI Picks sau.
                 </Text>
               </View>
             ) : null}
@@ -166,7 +182,7 @@ export default function PreferenceChatScreen() {
                   message.sender === 'user' ? styles.userMessage : styles.assistantMessage,
                 ]}
               >
-                {message.sender === 'assistant' ? <Text style={styles.messageLabel}>F-Love AI</Text> : null}
+                {message.sender === 'assistant' ? <Text style={styles.messageLabel}>F-Love AI Coach</Text> : null}
                 <Text style={message.sender === 'user' ? styles.userMessageText : styles.assistantMessageText}>
                   {message.content}
                 </Text>
@@ -193,13 +209,13 @@ export default function PreferenceChatScreen() {
 
         <View style={styles.composer}>
           <TextInput
-            accessibilityLabel="Nội dung tinh chỉnh AI Picks"
+            accessibilityLabel="Lời nhắn cho F-Love AI Coach"
             editable={Boolean(userId)}
             maxLength={MAX_CONTENT_LENGTH}
             multiline
             onChangeText={setContent}
             onSubmitEditing={submit}
-            placeholder="Mô tả thêm về người bạn muốn gặp…"
+            placeholder="Ví dụ: Mình ưu tiên người giao tiếp rõ ràng…"
             placeholderTextColor={colors.mutedLight}
             style={styles.input}
             textAlignVertical="top"
@@ -213,7 +229,7 @@ export default function PreferenceChatScreen() {
               </Text>
             </View>
             <Pressable
-              accessibilityLabel="Gửi tùy chỉnh"
+              accessibilityLabel="Gửi cho F-Love AI Coach"
               accessibilityRole="button"
               disabled={!canSend}
               onPress={submit}
@@ -266,6 +282,17 @@ const styles = StyleSheet.create({
   stateBody: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   thread: { flex: 1 },
   threadContent: { flexGrow: 1, gap: 10, justifyContent: 'flex-end', padding: 18 },
+  ageNotice: {
+    backgroundColor: colors.surfaceTint,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 5,
+    marginBottom: 4,
+    padding: 14,
+  },
+  ageNoticeTitle: { color: colors.primaryText, fontSize: 13, fontWeight: '800' },
+  ageNoticeBody: { color: colors.textSoft, fontSize: 12.5, lineHeight: 18 },
   introCard: {
     alignItems: 'center',
     backgroundColor: colors.surfaceWarm,

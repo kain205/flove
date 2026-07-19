@@ -2,13 +2,17 @@ import {
   isApiFailure,
   type AIProfileAnalysis,
   type ApiFailure,
-  type CuratedMatch,
+  type AiPickAccessMode,
+  type AiPickBatchAccessState,
+  type DailyPick,
   type DailyMatchBatch,
   type DailyMatchesResult,
+  type LockedDailyPick,
   type MatchFeedbackDecision,
   type OnboardingAnswerInput,
   type OnboardingBasicInput,
   type OnboardingReviewEdits,
+  type RevealedDailyPick,
   type UserProfile,
 } from '@flove/core';
 import type { FloveSupabaseClient } from './client';
@@ -52,44 +56,212 @@ export class DailyMatchesApiError extends ApiRequestError {
   }
 }
 
-function asDate(value: unknown): Date {
-  const date = value instanceof Date ? value : new Date(String(value ?? ''));
-  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+function record(value: unknown, message: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(message);
+  return value as Record<string, unknown>;
 }
 
-function hydrateMatch(match: CuratedMatch): CuratedMatch {
+function stringField(value: unknown, message: string): string {
+  if (typeof value !== 'string' || value.length === 0) throw new Error(message);
+  return value;
+}
+
+function textField(value: unknown, message: string): string {
+  if (typeof value !== 'string') throw new Error(message);
+  return value;
+}
+
+function finiteNumber(value: unknown, message: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(message);
+  return value;
+}
+
+function scoreField(value: unknown): number {
+  const score = finiteNumber(value, 'Invalid compatibility score.');
+  if (!Number.isInteger(score) || score < 0 || score > 100) throw new Error('Invalid compatibility score.');
+  return score;
+}
+
+function dateField(value: unknown, message: string): Date {
+  const date = value instanceof Date ? value : new Date(String(value ?? ''));
+  if (Number.isNaN(date.getTime())) throw new Error(message);
+  return date;
+}
+
+function stringArray(value: unknown, message: string): string[] {
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error(message);
+  return value;
+}
+
+function revealedPickFromPayload(value: unknown): RevealedDailyPick {
+  const match = record(value, 'Invalid revealed daily pick.');
+  if (match.kind !== 'revealed') throw new Error('Invalid revealed daily pick kind.');
+  const candidate = record(match.candidate, 'Invalid revealed daily pick candidate.');
+  const rawProfileText = record(candidate.profileText, 'Invalid revealed candidate profile text.');
+  const profileText: RevealedDailyPick['candidate']['profileText'] = {
+    bio: textField(rawProfileText.bio, 'Invalid revealed candidate profile bio.'),
+  };
+  for (const key of ['school', 'majorLabel', 'weekendStyle', 'conversationStyle', 'memorableThing', 'relationshipIntent'] as const) {
+    if (rawProfileText[key] != null) profileText[key] = textField(rawProfileText[key], `Invalid profile text field: ${key}.`);
+  }
+  const status = String(match.status);
+  if (!['pending', 'accepted', 'declined', 'skipped', 'reported', 'matched'].includes(String(match.status))) {
+    throw new Error('Invalid revealed pick status.');
+  }
+  const gender = candidate.gender == null
+    ? undefined
+    : ['male', 'female', 'other', 'prefer_not_to_show'].includes(String(candidate.gender))
+      ? candidate.gender as RevealedDailyPick['candidate']['gender']
+      : (() => { throw new Error('Invalid revealed candidate gender.'); })();
+  const heightCm = candidate.heightCm == null
+    ? candidate.heightCm as null | undefined
+    : finiteNumber(candidate.heightCm, 'Invalid revealed candidate height.');
   return {
-    ...match,
-    createdAt: asDate(match.createdAt),
-    ...(match.decidedAt ? { decidedAt: asDate(match.decidedAt) } : {}),
+    kind: 'revealed',
+    id: stringField(match.id, 'Invalid revealed match id.'),
+    batchId: stringField(match.batchId, 'Invalid revealed batch id.'),
+    userId: stringField(match.userId, 'Invalid revealed owner id.'),
+    candidateId: stringField(match.candidateId, 'Invalid revealed candidate id.'),
+    candidate: {
+      id: stringField(candidate.id, 'Invalid revealed candidate id.'),
+      name: stringField(candidate.name, 'Invalid revealed candidate name.'),
+      age: finiteNumber(candidate.age, 'Invalid revealed candidate age.'),
+      major: stringField(candidate.major, 'Invalid revealed candidate major.') as RevealedDailyPick['candidate']['major'],
+      campus: stringField(candidate.campus, 'Invalid revealed candidate campus.') as RevealedDailyPick['candidate']['campus'],
+      avatarUrl: textField(candidate.avatarUrl, 'Invalid revealed candidate avatar.'),
+      bio: textField(candidate.bio, 'Invalid revealed candidate bio.'),
+      interests: stringArray(candidate.interests, 'Invalid revealed candidate interests.'),
+      personalityTags: stringArray(candidate.personalityTags, 'Invalid revealed candidate personality tags.'),
+      datingGoals: stringArray(candidate.datingGoals, 'Invalid revealed candidate dating goals.'),
+      preferredVibes: stringArray(candidate.preferredVibes, 'Invalid revealed candidate preferred vibes.'),
+      profileText,
+      profileCompleteness: finiteNumber(candidate.profileCompleteness, 'Invalid revealed profile completeness.'),
+      ...(gender ? { gender } : {}),
+      ...(heightCm !== undefined ? { heightCm } : {}),
+    },
+    pairKey: stringField(match.pairKey, 'Invalid revealed pair key.'),
+    aiReason: textField(match.aiReason, 'Invalid AI reason.'),
+    ...(match.suggestedOpener == null ? {} : { suggestedOpener: textField(match.suggestedOpener, 'Invalid suggested opener.') }),
+    compatibilityLabel: stringField(match.compatibilityLabel, 'Invalid compatibility label.'),
+    compatibilityScore: scoreField(match.compatibilityScore),
+    status: status as RevealedDailyPick['status'],
+    feedbackTags: stringArray(match.feedbackTags, 'Invalid feedback tags.'),
+    ...(match.feedbackNote == null ? {} : { feedbackNote: textField(match.feedbackNote, 'Invalid feedback note.') }),
+    createdAt: dateField(match.createdAt, 'Invalid revealed pick timestamp.'),
+    ...(match.decidedAt == null ? {} : { decidedAt: dateField(match.decidedAt, 'Invalid revealed decision timestamp.') }),
   };
 }
 
-function hydrateBatch(batch: DailyMatchBatch): DailyMatchBatch {
+const LOCKED_PICK_KEYS = new Set(['kind', 'previewId', 'compatibilityScore', 'compatibilityLabel']);
+
+function lockedPickFromPayload(value: unknown): LockedDailyPick {
+  const match = record(value, 'Invalid locked daily pick.');
+  if (match.kind !== 'locked') throw new Error('Invalid locked daily pick kind.');
+  const unexpected = Object.keys(match).find(key => !LOCKED_PICK_KEYS.has(key));
+  if (unexpected) throw new Error(`Locked daily pick leaked forbidden field: ${unexpected}.`);
   return {
-    ...batch,
-    createdAt: asDate(batch.createdAt),
-    matches: (batch.matches ?? []).filter(match => match.status === 'pending').map(hydrateMatch),
+    kind: 'locked',
+    previewId: stringField(match.previewId, 'Invalid locked preview id.'),
+    compatibilityScore: scoreField(match.compatibilityScore),
+    compatibilityLabel: stringField(match.compatibilityLabel, 'Invalid compatibility label.'),
+  };
+}
+
+function dailyPickFromPayload(value: unknown): DailyPick {
+  const match = record(value, 'Invalid daily pick.');
+  if (match.kind === 'revealed') return revealedPickFromPayload(match);
+  if (match.kind === 'locked') return lockedPickFromPayload(match);
+  throw new Error('Unknown daily pick kind.');
+}
+
+function accessFromPayload(value: unknown) {
+  const access = record(value, 'Invalid daily match access metadata.');
+  if (access.mode !== 'open' && access.mode !== 'stub') throw new Error('Invalid AI Picks access mode.');
+  if (!['teaser', 'locked', 'unlocked'].includes(String(access.state))) {
+    throw new Error('Invalid AI Picks access state.');
+  }
+  const lockedCount = finiteNumber(access.lockedCount, 'Invalid locked pick count.');
+  const priceVnd = finiteNumber(access.priceVnd, 'Invalid AI Picks price.');
+  if (!Number.isInteger(lockedCount) || lockedCount < 0 || priceVnd < 0) {
+    throw new Error('Invalid AI Picks access metadata.');
+  }
+  return {
+    mode: access.mode as AiPickAccessMode,
+    state: access.state as AiPickBatchAccessState,
+    priceVnd,
+    lockedCount,
+  };
+}
+
+function hydrateBatch(value: unknown): DailyMatchBatch {
+  const batch = record(value, 'Invalid daily match batch.');
+  if (!Array.isArray(batch.matches)) throw new Error('Invalid daily match list.');
+  const parsedPicks = batch.matches.map(dailyPickFromPayload);
+  const picks = parsedPicks.filter(match => (
+    match.kind === 'locked' || match.status === 'pending'
+  ));
+  const access = accessFromPayload(batch);
+  if (parsedPicks.filter(match => match.kind === 'locked').length !== access.lockedCount) {
+    throw new Error('Locked pick count does not match the payload.');
+  }
+  const revealedCount = parsedPicks.filter(match => match.kind === 'revealed').length;
+  if (access.mode === 'open' && (access.state !== 'unlocked' || access.lockedCount !== 0)) {
+    throw new Error('Open AI Picks must reveal the full batch.');
+  }
+  if (access.state === 'unlocked' && access.lockedCount !== 0) {
+    throw new Error('Unlocked AI Picks cannot contain locked previews.');
+  }
+  if (access.state === 'locked' && revealedCount !== 0) {
+    throw new Error('A locked AI Picks batch cannot contain revealed profiles.');
+  }
+  if (access.state === 'teaser' && revealedCount > 1) {
+    throw new Error('A teaser AI Picks batch can reveal at most one profile.');
+  }
+  return {
+    id: stringField(batch.id, 'Invalid daily batch id.'),
+    userId: stringField(batch.userId, 'Invalid daily batch owner.'),
+    date: stringField(batch.date, 'Invalid daily batch date.'),
+    createdAt: dateField(batch.createdAt, 'Invalid daily batch timestamp.'),
+    matches: picks,
+    ...access,
   };
 }
 
 /** Runtime boundary for an untyped Edge Function payload. */
 export function dailyMatchesResultFromPayload(payload: unknown): DailyMatchesResult {
   if (!payload || typeof payload !== 'object') throw new Error('Invalid daily matches response.');
-  const result = payload as DailyMatchesResult;
+  const result = payload as Record<string, unknown>;
   switch (result.status) {
     case 'ready':
       if (!result.batch || !result.businessDate) throw new Error('Invalid ready daily matches response.');
-      return { ...result, batch: hydrateBatch(result.batch) };
+      if (result.source !== 'cached' && result.source !== 'generated') throw new Error('Invalid ready source.');
+      return {
+        status: 'ready',
+        businessDate: stringField(result.businessDate, 'Invalid business date.'),
+        source: result.source,
+        batch: hydrateBatch(result.batch),
+      };
     case 'processing':
       if (!result.businessDate || !Number.isFinite(result.retryAfterMs)) throw new Error('Invalid processing response.');
-      return result;
+      return {
+        status: 'processing',
+        businessDate: stringField(result.businessDate, 'Invalid business date.'),
+        retryAfterMs: finiteNumber(result.retryAfterMs, 'Invalid processing retry delay.'),
+      };
     case 'empty':
       if (!result.businessDate || !result.retryAfterAt) throw new Error('Invalid empty response.');
-      return result;
+      if (result.reason !== 'all_recently_seen' && result.reason !== 'no_eligible_candidates') {
+        throw new Error('Invalid empty response reason.');
+      }
+      return {
+        status: 'empty',
+        businessDate: stringField(result.businessDate, 'Invalid business date.'),
+        reason: result.reason,
+        retryAfterAt: stringField(result.retryAfterAt, 'Invalid retry timestamp.'),
+      };
     case 'needs_onboarding':
       if (!Array.isArray(result.missing)) throw new Error('Invalid onboarding response.');
-      return result;
+      return { status: 'needs_onboarding', missing: result.missing as never };
     default:
       throw new Error('Unknown daily matches response status.');
   }
@@ -121,6 +293,56 @@ export async function ensureDailyMatches(
   }
   if (isApiFailure(data)) throw new DailyMatchesApiError(data);
   return dailyMatchesResultFromPayload(data);
+}
+
+export interface UnlockDailyMatchBatchResult {
+  batchId: string;
+  productMode: AiPickAccessMode;
+  accessState: AiPickBatchAccessState;
+  priceVnd: number;
+  applied: boolean;
+  unlockSource: 'open' | 'trial' | 'simulated';
+}
+
+/** Opens an entire AI Picks batch. The current backend records only simulated unlocks. */
+export async function unlockDailyMatchBatch(
+  client: FloveSupabaseClient,
+  input: { batchId: string; idempotencyKey: string; expectedUserId: string },
+): Promise<UnlockDailyMatchBatchResult> {
+  const { data: auth, error: authError } = await client.auth.getUser();
+  if (authError || !auth.user) throw new Error('Not authenticated');
+  if (auth.user.id !== input.expectedUserId) {
+    throw new Error('Session changed while unlocking AI Picks.');
+  }
+  const { data, error } = await client.rpc('unlock_daily_match_batch' as never, {
+    p_batch_id: input.batchId,
+    p_idempotency_key: input.idempotencyKey,
+    p_expected_user_id: input.expectedUserId,
+  } as never);
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== 'object') throw new Error('Invalid AI Picks unlock response.');
+  const result = row as Record<string, unknown>;
+  if (result.product_mode !== 'open' && result.product_mode !== 'stub') {
+    throw new Error('Invalid AI Picks unlock mode.');
+  }
+  if (!['teaser', 'locked', 'unlocked'].includes(String(result.access_state))) {
+    throw new Error('Invalid AI Picks unlock state.');
+  }
+  if (!['open', 'trial', 'simulated'].includes(String(result.unlock_source))) {
+    throw new Error('Invalid AI Picks unlock source.');
+  }
+  if (typeof result.applied !== 'boolean') throw new Error('Invalid AI Picks unlock result.');
+  const priceVnd = finiteNumber(result.price_vnd, 'Invalid AI Picks price.');
+  if (!Number.isInteger(priceVnd) || priceVnd < 0) throw new Error('Invalid AI Picks price.');
+  return {
+    batchId: stringField(result.batch_id, 'Invalid unlocked batch id.'),
+    productMode: result.product_mode,
+    accessState: result.access_state as AiPickBatchAccessState,
+    priceVnd,
+    applied: result.applied,
+    unlockSource: result.unlock_source as UnlockDailyMatchBatchResult['unlockSource'],
+  };
 }
 
 /** @deprecated Use `ensureDailyMatches`; the backend owns the Vietnam business date. */
@@ -397,6 +619,17 @@ export async function acceptCuratedMatch(
   return data as { ok: true; isMutual: boolean; conversationId?: string };
 }
 
+export interface PreferenceCoachResult {
+  ok: true;
+  applied: boolean;
+  reply: string;
+  summary: string;
+  preferredTraits: string[];
+  avoidedTraits: string[];
+  fallback: boolean;
+  llmEligible?: boolean;
+}
+
 export async function sendPreferenceChatMessage(
   client: FloveSupabaseClient,
   content: string,
@@ -409,5 +642,5 @@ export async function sendPreferenceChatMessage(
   });
   if (error) return throwFunctionError(error);
   if (isApiFailure(data)) throw new ApiRequestError(data);
-  return data as { ok: true; applied: boolean };
+  return data as PreferenceCoachResult;
 }

@@ -1,15 +1,13 @@
 import {
   normalizeOnboardingDraft,
   type AIProfileAnalysis,
-  type CuratedMatch,
-  type DailyMatchBatch,
   type OnboardingDraftV2,
   type PersistedOnboardingDraft,
   type UserProfile,
 } from '@flove/core';
 import type { FloveSupabaseClient } from './client';
 import type { Database, Json } from './database.types';
-import { curatedMatchFromRow, dailyMatchBatchFromRows, userProfileFromRow } from './mappers';
+import { userProfileFromRow } from './mappers';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
@@ -199,43 +197,4 @@ export async function saveOnboardingDraft(
   const saved = onboardingDraftFromRow(data);
   if (!saved) throw new Error('Backend returned an invalid onboarding draft.');
   return saved;
-}
-
-/**
- * Legacy batch reader. New clients use `ensureDailyMatches`, which resolves the
- * Vietnam business date server-side. Without an explicit date this returns only the
- * latest batch and is intended for the one-release legacy adapter.
- */
-export async function getTodayMatches(client: FloveSupabaseClient, date?: string): Promise<DailyMatchBatch | null> {
-  const { data: auth } = await client.auth.getUser();
-  if (!auth.user) throw new Error('Not authenticated');
-
-  let batchQuery = client
-    .from('daily_match_batches')
-    .select('*')
-    .eq('user_id', auth.user.id);
-  batchQuery = date ? batchQuery.eq('date', date) : batchQuery.order('date', { ascending: false }).limit(1);
-  const { data: batch, error: batchError } = await batchQuery.maybeSingle();
-  if (batchError) throw batchError;
-  if (!batch) return null;
-
-  const { data: matches, error: matchesError } = await client
-    .from('curated_matches')
-    .select('*')
-    .eq('batch_id', batch.id)
-    .eq('status', 'pending')
-    .order('compatibility_score', { ascending: false });
-  if (matchesError) throw matchesError;
-
-  return dailyMatchBatchFromRows(batch, (matches ?? []).map(row => curatedMatchFromRow(row)));
-}
-
-export async function getCuratedMatch(client: FloveSupabaseClient, matchId: string): Promise<CuratedMatch> {
-  const { data, error } = await client
-    .from('curated_matches')
-    .select('*')
-    .eq('id', matchId)
-    .single();
-  if (error) throw error;
-  return curatedMatchFromRow(data);
 }

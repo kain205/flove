@@ -11,11 +11,42 @@ import {
   requestBlindDateReveal,
   sendPreferenceChatMessage,
   submitMatchFeedback,
+  unlockDailyMatchBatch,
 } from './functions';
 import { getPreferenceChatMessages } from './queries';
 
 describe('dailyMatchesResultFromPayload', () => {
   it('hydrates dates and exposes only pending picks', () => {
+    const candidate = {
+      id: 'candidate-a',
+      name: 'An',
+      age: 21,
+      major: 'SE',
+      campus: 'HCM',
+      avatarUrl: '',
+      bio: 'Bio',
+      interests: [],
+      personalityTags: [],
+      datingGoals: [],
+      preferredVibes: [],
+      profileText: { bio: 'Bio' },
+      profileCompleteness: 100,
+    };
+    const pick = {
+      kind: 'revealed',
+      id: 'pending',
+      batchId: 'u1_2026-07-14',
+      userId: 'u1',
+      candidateId: 'candidate-a',
+      candidate,
+      pairKey: 'candidate-a_u1',
+      aiReason: 'Lý do thật',
+      compatibilityLabel: 'Tiềm năng mạnh',
+      compatibilityScore: 80,
+      status: 'pending',
+      feedbackTags: [],
+      createdAt: '2026-07-14T00:00:00.000Z',
+    };
     const result = dailyMatchesResultFromPayload({
       status: 'ready',
       businessDate: '2026-07-14',
@@ -25,9 +56,10 @@ describe('dailyMatchesResultFromPayload', () => {
         userId: 'u1',
         date: '2026-07-14',
         createdAt: '2026-07-14T00:00:00.000Z',
+        mode: 'open', state: 'unlocked', priceVnd: 100000, lockedCount: 0,
         matches: [
-          { id: 'pending', status: 'pending', createdAt: '2026-07-14T00:00:00.000Z' },
-          { id: 'declined', status: 'declined', createdAt: '2026-07-14T00:00:00.000Z' },
+          pick,
+          { ...pick, id: 'declined', status: 'declined' },
         ],
       },
     });
@@ -35,7 +67,135 @@ describe('dailyMatchesResultFromPayload', () => {
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') return;
     expect(result.batch.createdAt).toBeInstanceOf(Date);
-    expect(result.batch.matches.map(match => match.id)).toEqual(['pending']);
+    expect(result.batch.matches.map(match => match.kind === 'revealed' ? match.id : match.previewId)).toEqual(['pending']);
+  });
+
+  it('rejects identity fields on a locked preview', () => {
+    expect(() => dailyMatchesResultFromPayload({
+      status: 'ready',
+      businessDate: '2026-07-14',
+      source: 'cached',
+      batch: {
+        id: 'u1_2026-07-14',
+        userId: 'u1',
+        date: '2026-07-14',
+        createdAt: '2026-07-14T00:00:00.000Z',
+        mode: 'stub', state: 'locked', priceVnd: 100000, lockedCount: 1,
+        matches: [{
+          kind: 'locked',
+          previewId: 'preview-a',
+          compatibilityLabel: 'Tiềm năng mạnh',
+          compatibilityScore: 80,
+          candidateId: 'must-not-leak',
+        }],
+      },
+    })).toThrow(/forbidden field/);
+  });
+
+  it('accepts an identity-free locked preview and preserves access metadata', () => {
+    const result = dailyMatchesResultFromPayload({
+      status: 'ready',
+      businessDate: '2026-07-14',
+      source: 'generated',
+      batch: {
+        id: 'u1_2026-07-14',
+        userId: 'u1',
+        date: '2026-07-14',
+        createdAt: '2026-07-14T00:00:00.000Z',
+        mode: 'stub', state: 'locked', priceVnd: 100000, lockedCount: 1,
+        matches: [{
+          kind: 'locked',
+          previewId: 'preview-a',
+          compatibilityLabel: 'Đáng khám phá',
+          compatibilityScore: 70,
+        }],
+      },
+    });
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.batch).toMatchObject({ mode: 'stub', state: 'locked', priceVnd: 100000, lockedCount: 1 });
+    expect(result.batch.matches[0]).toEqual({
+      kind: 'locked',
+      previewId: 'preview-a',
+      compatibilityLabel: 'Đáng khám phá',
+      compatibilityScore: 70,
+    });
+    expect(result.batch.matches[0]).not.toHaveProperty('id');
+    expect(result.batch.matches[0]).not.toHaveProperty('candidate');
+  });
+
+  it('rejects locked previews in server-open mode', () => {
+    expect(() => dailyMatchesResultFromPayload({
+      status: 'ready',
+      businessDate: '2026-07-14',
+      source: 'cached',
+      batch: {
+        id: 'u1_2026-07-14',
+        userId: 'u1',
+        date: '2026-07-14',
+        createdAt: '2026-07-14T00:00:00.000Z',
+        mode: 'open', state: 'unlocked', priceVnd: 100000, lockedCount: 1,
+        matches: [{
+          kind: 'locked',
+          previewId: 'preview-a',
+          compatibilityLabel: 'Đáng khám phá',
+          compatibilityScore: 70,
+        }],
+      },
+    })).toThrow(/Open AI Picks|Unlocked AI Picks/);
+  });
+
+  it('rejects every identity-bearing pick in a locked batch, including decided rows', () => {
+    const candidate = {
+      id: 'candidate-a', name: 'An', age: 21, major: 'SE', campus: 'HCM', avatarUrl: '', bio: 'Bio',
+      interests: [], personalityTags: [], datingGoals: [], preferredVibes: [],
+      profileText: { bio: 'Bio' }, profileCompleteness: 100,
+    };
+    expect(() => dailyMatchesResultFromPayload({
+      status: 'ready',
+      businessDate: '2026-07-14',
+      source: 'cached',
+      batch: {
+        id: 'u1_2026-07-14', userId: 'u1', date: '2026-07-14', createdAt: '2026-07-14T00:00:00.000Z',
+        mode: 'stub', state: 'locked', priceVnd: 100000, lockedCount: 0,
+        matches: [{
+          kind: 'revealed', id: 'declined', batchId: 'u1_2026-07-14', userId: 'u1',
+          candidateId: 'candidate-a', candidate, pairKey: 'candidate-a_u1', aiReason: 'Lý do thật',
+          compatibilityLabel: 'Tiềm năng mạnh', compatibilityScore: 80, status: 'declined',
+          feedbackTags: [], createdAt: '2026-07-14T00:00:00.000Z',
+        }],
+      },
+    })).toThrow(/locked AI Picks batch/i);
+  });
+
+  it('rejects an incomplete revealed profile before it reaches the UI', () => {
+    expect(() => dailyMatchesResultFromPayload({
+      status: 'ready',
+      businessDate: '2026-07-14',
+      source: 'cached',
+      batch: {
+        id: 'u1_2026-07-14',
+        userId: 'u1',
+        date: '2026-07-14',
+        createdAt: '2026-07-14T00:00:00.000Z',
+        mode: 'open', state: 'unlocked', priceVnd: 100000, lockedCount: 0,
+        matches: [{
+          kind: 'revealed',
+          id: 'match-a',
+          batchId: 'u1_2026-07-14',
+          userId: 'u1',
+          candidateId: 'candidate-a',
+          candidate: { id: 'candidate-a', name: 'An', age: 21 },
+          pairKey: 'candidate-a_u1',
+          aiReason: 'Lý do thật',
+          compatibilityLabel: 'Tiềm năng mạnh',
+          compatibilityScore: 80,
+          status: 'pending',
+          feedbackTags: [],
+          createdAt: '2026-07-14T00:00:00.000Z',
+        }],
+      },
+    })).toThrow(/candidate profile text/);
   });
 
   it('rejects unknown response shapes', () => {
@@ -96,6 +256,42 @@ describe('onboarding compatibility wrappers', () => {
 });
 
 describe('user-intent fences', () => {
+  it('unlocks a whole batch through the owner-fenced idempotent RPC', async () => {
+    let call: unknown;
+    const client = {
+      auth: {
+        getUser: async () => ({ data: { user: { id: 'user-a' } }, error: null }),
+      },
+      rpc: async (name: string, input: unknown) => {
+        call = { name, input };
+        return {
+          data: [{
+            batch_id: 'batch-a',
+            product_mode: 'stub',
+            access_state: 'unlocked',
+            price_vnd: 100000,
+            applied: true,
+            unlock_source: 'simulated',
+          }],
+          error: null,
+        };
+      },
+    };
+    await expect(unlockDailyMatchBatch(client as never, {
+      batchId: 'batch-a',
+      idempotencyKey: 'unlock-a',
+      expectedUserId: 'user-a',
+    })).resolves.toMatchObject({ batchId: 'batch-a', applied: true, accessState: 'unlocked' });
+    expect(call).toEqual({
+      name: 'unlock_daily_match_batch',
+      input: {
+        p_batch_id: 'batch-a',
+        p_idempotency_key: 'unlock-a',
+        p_expected_user_id: 'user-a',
+      },
+    });
+  });
+
   it('forwards the expected user on preference chat', async () => {
     let body: unknown;
     const client = {

@@ -11,13 +11,15 @@ F-Love is an AI-assisted dating and matchmaking app for students. The main produ
 Core flows currently represented in the repository:
 
 - Auth: Supabase email/password and Google OAuth through PKCE. Signup is open to any provider;
-  a Before User Created hook plus runtime defense-in-depth checks only require a plausible verified
-  email (the former FPT-only gate was removed in `202607190001_open_signup.sql`; the hook/helper
-  names keep their historical `fpt` naming for compatibility).
+  a Before User Created hook requires a plausible email, and runtime defense-in-depth requires its
+  canonical Auth account to be confirmed (the former FPT-only gate was removed in
+  `202607190001_open_signup.sql`; the hook/helper names keep their historical `fpt` naming for compatibility).
 - Onboarding/profile: profile fields, structured interests/tags/goals/vibes, profile completeness, and avatar storage contract.
-- AI Picks: daily curated recommendations, feedback, accept/decline, and server-side mutual accept.
-- Preference chat: user preference messages and assistant replies through an Edge Function.
-- Messages/realtime chat: official conversations and messages after mutual accept.
+- AI Picks: daily curated recommendations, truthful overall compatibility signals, server-controlled
+  open/stub access, feedback, and server-side mutual accept.
+- F-Love AI Coach: Vietnamese preference coaching with canonical preferred/avoided soft-trait memory.
+- Messages/realtime chat: official conversations after mutual accept, plus private Wingman draft
+  suggestions that never enter the shared message stream until the user explicitly sends one.
 - Blind Date: transactional anonymous queue/session, participant-safe chat, and mutual reveal.
 - Safety: `reports`, `blocks`, `moderation_events`, and `user_safety_actions`; AI Picks exposes a report-and-hide action, while broader block controls remain a follow-up.
 
@@ -45,7 +47,7 @@ supabase/migrations
   Cloud-first Postgres schema, enum types, RLS policies, storage policies, and RPC functions.
 
 supabase/functions
-  Supabase Edge Functions for AI Picks, feedback, mutual accept wrapper, preference chat, Blind Date, and reveal.
+  Supabase Edge Functions for AI Picks, feedback, mutual accept, AI Coach, private Wingman, Blind Date, and reveal.
 
 supabase/tests
   Database contract/RLS test files for the Supabase CLI test runner.
@@ -90,8 +92,13 @@ AI_WORKER_SECRET
 MATCH_METRICS_SAMPLE_RATE
 ```
 
-`OPENAI_API_KEY` powers server-side onboarding analysis and queued AI jobs only. `OPENAI_MODEL`
-selects the chat model; `OPENAI_EMBEDDING_MODEL` selects the fixed 1536-dimension embedding model.
+`OPENAI_API_KEY` powers server-side onboarding analysis, queued AI jobs, the 18+ Preference Coach,
+and the 18+ conversation Wingman. `OPENAI_MODEL` selects the configured chat model;
+`OPENAI_EMBEDDING_MODEL` selects the fixed 1536-dimension embedding model. Structured Responses use
+strict JSON schemas, handle explicit refusals, and set `store: false`; no client calls OpenAI directly.
+These boundaries follow OpenAI's [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
+[data controls](https://developers.openai.com/api/docs/guides/your-data), and
+[under-18 guidance](https://developers.openai.com/api/docs/guides/safety-checks/under-18-api-guidance).
 `AI_WORKER_SECRET` authenticates only `process-ai-jobs` and must also be stored in Supabase Vault for
 the Cron invocation. End-user functions use gateway JWT verification plus an in-function `getUser` check.
 `MATCH_METRICS_SAMPLE_RATE` optionally controls aggregate hard-filter funnel logging (default `0.05`;
@@ -113,10 +120,12 @@ Use `apps/app/.env.example` as the non-secret template for the Expo app.
 
 Supabase Cloud is the backend contract. `auth.users.id` is the canonical user identity, and `profiles.id` references `auth.users.id`.
 
-Schema lives in four additive migrations. `202607140001_backend_reliability.sql` is the v2 cutover
+Schema lives in additive migrations. `202607140001_backend_reliability.sql` is the v2 cutover
 on top of the initial contract and notebook/vector migration. It backfills canonical readiness and
 adds recoverable state without deleting v1 endpoints or data. `202607150001_blind_date_privacy.sql`
 adds the anonymous data boundary and the scoped one-release message compatibility policy.
+`202607190002_ai_picks_access_and_coaches.sql` adds the AI Picks access DTO/ledger, open-signup policy
+repairs, canonical Coach memory, and private Wingman context/cache contracts.
 
 Important v2 objects and invariants:
 
@@ -135,6 +144,12 @@ Important v2 objects and invariants:
 - `daily_match_batches`: one row per user/Vietnam business date with `generating | ready | empty |
   failed`, claim fencing, attempts, retry time, algorithm/profile/pool revision, and enrichment state.
   `match_generation_attempts` stores only timings, counts, outcomes, and error codes—never answers.
+- AI Picks product access is server-owned. `ai_pick_product_config` defaults to `open` and 100,000 VND;
+  `stub` exists only for operator/testing use. Ready batches carry explicit `teaser | locked | unlocked`
+  state, a single trial-reveal pointer, and simulated unlock metadata. Open mode never consumes a trial,
+  never shows a paywall, and never writes a purchase. Locked recommendations cross the API boundary only
+  as `{kind, previewId, compatibilityScore, compatibilityLabel}`; the opaque preview UUID is unrelated
+  to the candidate or internal match ID.
 - `claim_daily_match_batch` and `finalize_daily_match_batch`: advisory-lock claim and transactional
   batch+match finalize. A batch is never marked ready before all match rows exist; stale claims cannot
   finalize. Empty rows retry on time or candidate-pool revision changes.
@@ -154,28 +169,37 @@ Important v2 objects and invariants:
   stale revisions/attempts and allow enrichment to change prose only—not deterministic scores or ordering.
   A new profile revision deletes older uncompleted embedding messages for that user before enqueueing the
   latest revision, preventing edit bursts from filling the FIFO with obsolete provider work.
-- `submit_match_feedback_atomic`, `save_preference_chat_turn_atomic`, `send_message_atomic`,
+- `submit_match_feedback_atomic`, `finalize_preference_coach_request`, `send_message_atomic`,
   `mark_conversation_read`, `find_blind_date_partner_atomic`, and `request_reveal_atomic`: authenticated,
-  idempotent transactions for decisions, preference learning, messaging/read state, Blind Date claims,
-  and reveal merge. Blind Date claims return only opaque IDs and a masked name; the counterpart UUID is
-  returned only after mutual reveal.
-- Onboarding review prose and Preference Chat prose are normalized server-side into bounded soft tokens.
-  They can influence later deterministic ranking, but cannot loosen mutual consent/safety filters or
-  create hard exclusions. Feedback is capped as one weighted score component.
+  idempotent transactions for decisions, canonical preference memory, messaging/read state, Blind Date
+  claims, and reveal merge. Blind Date claims return only opaque IDs and a masked name; the counterpart
+  UUID is returned only after mutual reveal.
+- `ai_assistant_requests` provides claim/finalize/cached-response fencing by user, scope, client request
+  ID, and normalized client-payload fingerprint. A durable `provider_started_at` fence is committed before
+  an external model call; retries after that boundary keep the original claim token, skip a second provider
+  call, and atomically finalize a safe fallback if the first worker did not finish. Only failures before the
+  provider boundary may abandon a claim for immediate retry. Its mutation RPCs are service-role-only, so
+  clients cannot fabricate Coach memory or cached suggestions. Cached requests do not consume provider
+  quota; Wingman cache stores suggestions, not raw transcript or provider context, expires after one hour,
+  and opportunistically purges expired rows through the indexed claim path.
+- Onboarding review and Coach prose are normalized server-side into bounded soft tokens. Preferred traits
+  add a small ranking signal and avoided traits subtract a small signal inside the existing feedback cap;
+  neither can loosen consent/safety filters or create hard exclusions.
 - `get_blind_date_session` and `list_conversation_messages`: participant-scoped read contracts that hide
   raw session membership, UUID-keyed reveal state, message `sender_id`, and message idempotency keys.
   Message ownership is exposed only as the caller-relative `is_mine` boolean.
-- `public_profiles` remains the cross-user display-safe view and includes only canonically ready,
-  currently safe profiles. V2 own-profile queries and confirm responses explicitly omit vectors;
+- `public_profiles` remains a service-side candidate projection and includes only canonically ready,
+  currently safe profiles. Authenticated clients cannot enumerate it or read `curated_matches` directly;
+  AI Picks uses the service-only `get_daily_picks_safe` DTO. V2 own-profile queries and confirm responses explicitly omit vectors;
   private preferences, answers, analysis, internal attempts, queue state, and rate-limit buckets are
   not cross-user readable. The released binary's owner-only `profiles` SELECT remains for one
   compatibility release and must be replaced by a narrow own-profile RPC/view when that adapter is removed.
-- Supabase Auth invokes `before_user_created_require_fpt` as `supabase_auth_admin`; all client/service HTTP
-  roles are denied direct execution. `private.assert_fpt_self_admission` reads the canonical `auth.users`
-  row inside every authenticated RPC (except the data-free business-date helper) and the one-release direct
-  message/report/block RLS paths. The `private` schema is not exposed by the Data API. Edge admission,
-  profile/view policies and avatar-write policies repeat the exact-domain check; service-role migration,
-  repair and backfill paths bypass this user admission gate.
+- Supabase Auth invokes the historically named `before_user_created_require_fpt` hook as
+  `supabase_auth_admin`; it accepts a plausible email from any provider before account creation. The
+  historically named `private.assert_fpt_self_admission` enforces the confirmed-email/owner boundary inside authenticated
+  RPCs. Profile writes, candidate eligibility, and avatar policies all require that canonical confirmed
+  Auth email; avatar writes additionally enforce the authenticated owner/path boundary. No FPT-domain
+  restriction remains. The `private` schema is not exposed by the Data API.
 - Storage bucket `avatars`: owner writes/updates and public reads; object size is capped at 5 MiB and
   accepted MIME types are JPEG, PNG and WebP. Profile URLs must point to that user's bucket prefix.
 
@@ -183,8 +207,11 @@ RLS is the real access-control boundary:
 
 - Users can select their own profile and edit only explicitly granted display/discovery columns.
 - Users can read only their own onboarding draft; autosave writes must use the revision RPC.
-- Users can read safe public profile fields through `public_profiles`.
-- Users can read their own daily batches, curated matches, match feedback, preference profiles, and preference chat messages.
+- Users receive candidate display fields only through the authenticated AI Picks Edge Function; direct
+  authenticated reads of `public_profiles` and `curated_matches` are revoked.
+- Users can read their own daily-batch metadata, match feedback, preference profiles, and preference
+  chat messages. Locked batch actions are rejected inside `submit_match_feedback_atomic`, including
+  requests that bypass the UI.
 - Users can read safe conversation metadata only when they are participants. Anonymous conversation
   rows are forced to keep `pair_key`/`match_id` null and scrub sender UUIDs from `last_message` until reveal.
 - Raw Blind Date sessions and anonymous messages are not client-readable; participant reads use the safe RPCs.
@@ -201,6 +228,8 @@ Privileged logic must stay server-side:
 - Clients cannot create official matches, conversations, participants, batches, analysis, or queue jobs.
 - Feedback, messaging, Blind Date and reveal mutations go through their atomic RPCs with idempotency keys.
   The identity-bearing internal claim/reveal functions are owner-only and cannot be invoked by clients.
+- Whole-batch unlocks go through `unlock_daily_match_batch`. In `stub` mode they create a unique
+  `simulated` ledger row; there is no payment provider, real transaction, or client-writable entitlement.
 - Service-role functions authenticate the user first and pass the authenticated user ID into narrow RPCs.
 - Mutating user endpoints carry a captured `expectedUserId`; Edge/RPC fences reject a response or write
   if the active session changed while a request was in flight.
@@ -220,6 +249,15 @@ in `packages/core/src/matching-engine.ts` is imported by both Node/browser and D
   and returns the batch directly. OpenAI is never on this critical path.
 - `generate-daily-matches`: one-release compatibility adapter running the same v2 handler; client dates
   are intentionally ignored.
+- `send-preference-chat-message`: F-Love AI Coach. It reads only the caller's bounded profile/review,
+  canonical preference memory and latest 12 preference turns; strict structured output replaces the
+  full canonical memory. Provider failure/refusal/rate-limit stores a Vietnamese fallback turn while
+  leaving memory unchanged. Profiles under 18 use deterministic soft-preference saving and never call
+  the provider.
+- `ask-conversation-wingman`: participant-only private coaching for revealed, non-anonymous conversations
+  and users aged 18+. It sends at most 12 of the latest 20 caller-relative messages after contact-detail
+  redaction, plus allowlisted caller context, and returns exactly three unique suggestions. Suggestions
+  are never written to messages, conversation summaries, unread counts, or Realtime.
 - The analyze/confirm endpoints also accept the released raw `{answers,basic}` payload for one release.
   The adapter persists it through the revision CAS, ignores client matching signals, and writes only a
   server-derived legacy guard projection.
@@ -227,7 +265,7 @@ in `packages/core/src/matching-engine.ts` is imported by both Node/browser and D
   jobs. Embeddings are batched five bounded inputs per provider request and validated at 1536 dimensions;
   enrichment receives only bounded display snapshots and cannot change score/order.
 - `submit-match-feedback`, `accept-curated-match`, `send-preference-chat-message`,
-  `find-blind-date-partner`, and `request-reveal` wrap the atomic authenticated RPCs.
+  `ask-conversation-wingman`, `find-blind-date-partner`, and `request-reveal` wrap atomic authenticated RPCs.
 
 Structured logs contain request/outcome/stage latency, cached/generated source, safe counts and sampled
 filter funnels. Worker outcomes also include queue age, delivery/read count, error code, and aggregate
@@ -253,16 +291,18 @@ Expo Router routes:
   check-email state with login and change-email actions.
 - `app/auth/callback.tsx`: OAuth and email-confirmation callback route.
 - `app/auth/reset-password.tsx`: password reset route.
-- `app/(tabs)/ai-picks.tsx`: typed loading/processing/empty/error/ready AI Picks states and
-  idempotent accept/decline/skip/report actions.
+- `app/(tabs)/ai-picks.tsx`: typed loading/processing/empty/error/ready AI Picks states, a strict
+  `revealed | locked` DTO boundary, truthful overall score/label display, idempotent decisions, and
+  test-only simulated whole-batch unlock UI. It never fabricates component subscores or verification.
 - `app/(tabs)/blind-date.tsx`: Blind Date entry.
 - `app/(tabs)/messages.tsx`: conversation list.
 - `app/(tabs)/profile.tsx`: profile save/sign out shell.
-- `app/preference-chat.tsx`: Profile-reachable preference-learning chat with owner-scoped history,
-  bounded input, explicit retry UI, and stable idempotency keys for manual retries.
+- `app/preference-chat.tsx`: Profile- and AI-Picks-reachable F-Love AI Coach with owner-scoped history,
+  bounded input, under-18 disclosure, explicit retry UI, and stable idempotency keys.
 - `app/onboarding/index.tsx`: multi-step onboarding/profile interview (`src/screens/onboarding/OnboardingScreen.tsx`), guarded by an authenticated session.
 - `app/chat/[conversationId].tsx`: message list through the relative-ownership RPC, idempotent send,
-  atomic focus-time read acknowledgement, and reload-safe mutual reveal controls for Blind Date conversations.
+  atomic focus-time read acknowledgement, reload-safe Blind Date reveal controls, and a private Wingman
+  panel whose suggestions only fill the existing composer after optional overwrite confirmation.
 
 Important app layers:
 
@@ -270,7 +310,7 @@ Important app layers:
 - `src/lib/secureStorage.ts`: uses SecureStore on native and localStorage/memory fallback on web.
 - `src/providers/AuthProvider.tsx`: Supabase session state.
 - `src/providers/AppProviders.tsx`: React Query provider and foreground focus handling.
-- `src/services/*`: app-facing service wrappers for auth, profile, matching, and preference chat.
+- `src/services/*`: app-facing service wrappers for auth, profile, matching/unlock, AI Coach, and Wingman.
 - `src/i18n/index.ts`: i18next setup.
 - `src/theme.ts`: design tokens (warm-orange palette, gradients, radii, spacing, fonts) shared across screens. Screens read tokens from here instead of hardcoding hex values.
 - `src/components/*`: shared React Native primitives — `Button` (gradient/secondary/light), `TextField`, `BrandMark`, `Chip`, `MeterBar`, `Avatar`, `Screen`.
@@ -291,9 +331,9 @@ autosaved draft remains intact. Avatar upload is wired on web (DOM file input �
 `avatars` bucket) and prompts to add the photo later on native.
 
 Review edits are re-normalized on the server and never trusted as client-authored structured signals.
-Changing the draft invalidates its analysis revision. Preference Chat likewise extracts bounded
-canonical tokens server-side, so successful turns affect future soft ranking without changing hard
-gender, age, block, report, safety, height, or dealbreaker constraints.
+Changing the draft invalidates its analysis revision. AI Coach likewise stores bounded canonical
+preferred and avoided tokens server-side, so successful turns affect future soft ranking without
+changing hard gender, age, block, report, safety, height, or dealbreaker constraints.
 
 React Query owns initial loads and cached source of truth. Every protected key includes `userId`.
 `AuthProvider` clears the entire query cache on account changes and installs user-scoped Realtime
@@ -327,8 +367,8 @@ Run `supabase:config:push` only after the migration creates
 production. The checked-in `[auth.email]` config explicitly keeps signups, double-confirmed email changes
 and email confirmations enabled, so `config push` cannot silently inherit the local confirmation-off
 default. Verify Google continues to return an owned, confirmed email through GoTrue as well.
-The pre-migration audit reports aggregate legacy non-FPT Auth/profile ownership counts without selecting
-individual email addresses, so those accounts can be handled explicitly before app cutover.
+The pre-migration audit reports aggregate account/profile ownership counts without selecting individual
+email addresses; open signup no longer requires a domain-specific account migration.
 
 `supabase:functions:deploy` uses the API deployment path so the shared workspace scorer import is
 included. CI first runs `supabase:functions:bundle`, which bundles every Edge entrypoint from the pinned
@@ -342,14 +382,19 @@ The logged PGMQ queue plus Cron is the delivery guarantee.
 Rollout order:
 
 1. Run the read-only production inventory and retain the result.
-2. Push the additive migration, enable/verify the FPT Auth hook, then deploy v2 Edge Functions while the
-   v1 adapter remains available.
+2. Push the additive migration, enable/verify the verified-email Auth hook, then deploy Edge Functions
+   and the app using the `revealed | locked` DTO in the same cutover. Older clients that read
+   `curated_matches`/`public_profiles` directly are intentionally incompatible after the grants are revoked.
 3. Run backfill/repair checks and `supabase/ops/backend_v2_slo.sql`.
 4. Cut the app over at 10%, 50%, then 100%, monitoring generation failure, uncached p95, stuck claims,
    and embedding queue age at every stage.
 5. Keep `generate-daily-matches`, raw onboarding/profile-upsert adapters, and the revealed-message
    compatibility policy for one release. Remove them and freeze Firebase only after seven consecutive
    days meeting SLO.
+
+Keep `ai_pick_product_config.mode = 'open'` throughout this rollout. `stub` is an operator/test mode;
+enabling real paid access requires a separate payment-provider, receipt-verification, refund, and support
+design that is intentionally absent here.
 
 Operational targets/alerts are: cached batch p95 <1s, uncached deterministic generation p95 <3s,
 generation failures >2%, `generating` >2 minutes, or embedding pending/processing >10 minutes.
@@ -440,7 +485,7 @@ npm run supabase:test
 Notes:
 
 - CI runs core/package tests, app typecheck/lint/web export, Deno Edge checks, local migration/seed and
-  181 pgTAP contract/RLS/state-machine assertions (104 behavior and 77 RLS/ACL contracts).
+  the pgTAP behavior/RLS/state-machine suites.
 - `npm run supabase:test` depends on Docker/local Supabase.
 - `npm run supabase:types` writes `packages/supabase/src/database.types.ts`; only run it against the intended linked Supabase Cloud project.
 - Expo Web export loads `apps/app/.env.local` when present. Never commit real env files.
@@ -456,6 +501,9 @@ Completed backend reliability v2 in the repository:
 - Expo app shell exists in `apps/app`.
 - Additive migration, protected RLS/grants, deterministic matching, durable AI queue worker and atomic
   interaction flows exist under `supabase`.
+- AI Picks open/stub access, identity-free locked previews, simulated unlock ledger, open-signup policy
+  repair, canonical Coach memory, generic assistant idempotency and private Wingman context are implemented
+  as additive database/Edge contracts. Production remains in open mode.
 - Shared packages exist in `packages/core` and `packages/supabase`.
 - Vercel config exists at `apps/app/vercel.json`.
 - Client Supabase env template exists at `apps/app/.env.example`.
@@ -468,7 +516,7 @@ Deployment/production follow-ups:
 
 - TODO: run the pre-migration inventory against production; the linked database was unreachable from
   this workspace, so production counts and actual p95 are not recorded here.
-- TODO: push the migration/config/functions, verify the FPT Auth hook with real password and Google
+- TODO: push the migration/config/functions, verify the open verified-email Auth hook with real password and Google
   signups, configure worker Cron/Vault secrets, regenerate types from the real project, and execute the
   staged 10/50/100 rollout.
 - TODO: benchmark candidate pools at 100/1,000/10,000 production-like rows with `EXPLAIN (ANALYZE,

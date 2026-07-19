@@ -1,27 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Easing, Image, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, Coffee, Flag, Heart, MessageCircle, RotateCcw, Sparkles, Star, X } from 'lucide-react-native';
+import { Bell, Coffee, Flag, Heart, LockKeyhole, MessageCircle, RotateCcw, Sparkles, X } from 'lucide-react-native';
 import { Chip } from '@/components/Chip';
 import { useCountUp } from '@/lib/useCountUp';
-import { actOnPick, ensureTodayMatches } from '@/services/matching';
+import { actOnPick, ensureTodayMatches, unlockTodayMatchBatch } from '@/services/matching';
 import { useAuth } from '@/providers/AuthProvider';
 import { colors, gradientForKey, gradients, radii } from '@/theme';
-import type { CuratedMatch } from '@flove/core';
+import type { LockedDailyPick, RevealedDailyPick } from '@flove/core';
 
 const MAX_PROCESSING_POLLS = 12;
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
-
-function subScores(score: number) {
-  return {
-    values: clamp(score - 3),
-    interests: clamp(score + 2),
-    personality: clamp(score - 1),
-  };
-}
 
 function cleanInsightLine(line: string) {
   return line
@@ -30,29 +22,12 @@ function cleanInsightLine(line: string) {
     .trim();
 }
 
-function splitAiInsights(match: CuratedMatch) {
-  const lines = (match.aiReason || '')
+function splitAiInsights(match: RevealedDailyPick) {
+  return (match.aiReason || '')
     .split(/\n+/)
     .map(cleanInsightLine)
-    .filter(Boolean);
-
-  if (lines.length >= 2) return lines.slice(0, 3);
-
-  const candidate = match.candidate;
-  const fallback = lines[0] ? [lines[0]] : [];
-  if (candidate.datingGoals.length > 0) {
-    fallback.push(`Cả hai có tín hiệu cùng hướng tới ${candidate.datingGoals.slice(0, 2).join(' và ')}.`);
-  }
-  if (candidate.interests.length > 0) {
-    fallback.push(`Bạn có thể bắt nhịp qua ${candidate.interests.slice(0, 3).join(', ')}.`);
-  }
-  if (candidate.preferredVibes.length > 0) {
-    fallback.push(`Vibe nổi bật: ${candidate.preferredVibes.slice(0, 2).join(', ')}, dễ mở chuyện nhẹ nhàng.`);
-  }
-  if (candidate.bio && fallback.length < 3) {
-    fallback.push(candidate.bio.length > 105 ? `${candidate.bio.slice(0, 102)}...` : candidate.bio);
-  }
-  return fallback.slice(0, 3);
+    .filter(Boolean)
+    .slice(0, 3);
 }
 
 export default function AiPicksScreen() {
@@ -62,6 +37,7 @@ export default function AiPicksScreen() {
   const queryClient = useQueryClient();
   const [decidedIds, setDecidedIds] = useState<Set<string>>(() => new Set());
   const [processingPolls, setProcessingPolls] = useState(0);
+  const [unlockConfirmationOpen, setUnlockConfirmationOpen] = useState(false);
 
   const matchesQuery = useQuery({
     queryKey: ['ai-picks', userId],
@@ -79,15 +55,25 @@ export default function AiPicksScreen() {
     onSuccess: (_data, input) => {
       if (input.userId !== userId) return;
       setDecidedIds(previous => new Set(previous).add(input.matchId));
+      if (input.decision === 'reported') {
+        void queryClient.invalidateQueries({ queryKey: ['ai-picks', userId] });
+      }
       if (input.decision === 'accepted') {
         void queryClient.invalidateQueries({ queryKey: ['conversations', userId] });
       }
+    },
+  });
+  const unlockMutation = useMutation({
+    mutationFn: ({ batchId }: { batchId: string }) => unlockTodayMatchBatch(batchId, userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['ai-picks', userId] });
     },
   });
 
   useEffect(() => {
     setDecidedIds(new Set());
     setProcessingPolls(0);
+    setUnlockConfirmationOpen(false);
   }, [userId]);
 
   useEffect(() => {
@@ -165,12 +151,31 @@ export default function AiPicksScreen() {
     );
   }
 
-  const matches = result.batch.matches.filter(match => match.status === 'pending' && !decidedIds.has(match.id));
-  const current: CuratedMatch | undefined = matches[0];
-  const remaining = matches.length;
+  const matches = result.batch.matches.filter(
+    (match): match is RevealedDailyPick => match.kind === 'revealed'
+      && match.status === 'pending'
+      && !decidedIds.has(match.id),
+  );
+  const lockedMatches = result.batch.matches.filter(
+    (match): match is LockedDailyPick => match.kind === 'locked',
+  );
+  const showLockedPreviews = result.batch.mode === 'stub'
+    && result.batch.lockedCount > 0
+    && lockedMatches.length > 0;
+  const current = matches[0];
+  const remaining = matches.length + lockedMatches.length;
   const act = (decision: 'accepted' | 'declined' | 'skipped' | 'reported') => {
     if (!current || actionMutation.isPending) return;
     actionMutation.mutate({ matchId: current.id, decision, userId });
+  };
+  const requestUnlock = () => {
+    if (!showLockedPreviews || unlockMutation.isPending) return;
+    setUnlockConfirmationOpen(true);
+  };
+  const confirmUnlock = () => {
+    if (!showLockedPreviews || unlockMutation.isPending) return;
+    setUnlockConfirmationOpen(false);
+    unlockMutation.mutate({ batchId: result.batch.id });
   };
 
   return (
@@ -180,8 +185,19 @@ export default function AiPicksScreen() {
           <Text style={styles.title}>AI Picks</Text>
           <Text style={styles.subtitle}>Gợi ý hôm nay · {remaining} người còn lại</Text>
         </View>
-        <View style={styles.bell}>
-          <Bell size={19} color={colors.primaryText} />
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mở F-Love AI Coach"
+            onPress={() => router.push('/preference-chat')}
+            style={styles.coachButton}
+          >
+            <Sparkles size={16} color={colors.primaryStrong} />
+            <Text style={styles.coachButtonText}>AI Coach</Text>
+          </Pressable>
+          <View style={styles.bell}>
+            <Bell size={19} color={colors.primaryText} />
+          </View>
         </View>
       </View>
 
@@ -206,7 +222,7 @@ export default function AiPicksScreen() {
               ? (actionMutation.error instanceof Error ? actionMutation.error.message : 'Chưa lưu được lựa chọn. Vui lòng thử lại.')
               : undefined}
           />
-        ) : (
+        ) : lockedMatches.length === 0 ? (
           <View style={styles.empty}>
             <Text style={{ fontSize: 52, marginBottom: 14 }}>🎉</Text>
             <Text style={styles.emptyTitle}>Hết gợi ý hôm nay</Text>
@@ -214,9 +230,66 @@ export default function AiPicksScreen() {
               Bạn đã xử lý toàn bộ AI Picks hôm nay. Quay lại sau để nhận batch mới nhé.
             </Text>
           </View>
-        )}
+        ) : null}
+        {showLockedPreviews ? (
+          <LockedPicksPanel
+            picks={lockedMatches}
+            lockedCount={result.batch.lockedCount}
+            priceVnd={result.batch.priceVnd}
+            busy={unlockMutation.isPending}
+            error={unlockMutation.isError
+              ? (unlockMutation.error instanceof Error ? unlockMutation.error.message : 'Chưa mở khóa được batch demo.')
+              : undefined}
+            onUnlock={requestUnlock}
+          />
+        ) : null}
       </ScrollView>
+      <UnlockConfirmation
+        visible={unlockConfirmationOpen && showLockedPreviews}
+        priceVnd={result.batch.priceVnd}
+        onCancel={() => setUnlockConfirmationOpen(false)}
+        onConfirm={confirmUnlock}
+      />
     </SafeAreaView>
+  );
+}
+
+function UnlockConfirmation({
+  visible,
+  priceVnd,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  priceVnd: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onCancel} transparent visible={visible}>
+      <View accessibilityLabel="Xác nhận mở khóa giả lập" style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Mở khóa bản demo?</Text>
+          <Text style={styles.modalBody}>
+            Đây là thao tác giả lập, không phát sinh thanh toán. Giá dự kiến cho một batch là{' '}
+            {priceVnd.toLocaleString('vi-VN')}đ.
+          </Text>
+          <View style={styles.modalActions}>
+            <Pressable accessibilityRole="button" onPress={onCancel} style={styles.modalCancelButton}>
+              <Text style={styles.modalCancelText}>Để sau</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Xác nhận mở khóa giả lập"
+              accessibilityRole="button"
+              onPress={onConfirm}
+              style={styles.modalConfirmButton}
+            >
+              <Text style={styles.modalConfirmText}>Mở khóa giả lập</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -251,6 +324,58 @@ function StatusScreen({
   );
 }
 
+function LockedPicksPanel({
+  picks,
+  lockedCount,
+  priceVnd,
+  busy,
+  error,
+  onUnlock,
+}: {
+  picks: LockedDailyPick[];
+  lockedCount: number;
+  priceVnd: number;
+  busy: boolean;
+  error?: string;
+  onUnlock: () => void;
+}) {
+  return (
+    <View style={styles.lockedPanel}>
+      <View style={styles.lockedHeading}>
+        <View style={styles.lockedTitleRow}>
+          <LockKeyhole size={18} color={colors.primaryStrong} />
+          <Text style={styles.lockedTitle}>{lockedCount} gợi ý đang khóa</Text>
+        </View>
+        <Text style={styles.lockedBody}>
+          Preview chỉ hiển thị chỉ số xếp hạng, không tiết lộ danh tính hay hồ sơ.
+        </Text>
+      </View>
+      <View style={styles.lockedList}>
+        {picks.map(pick => (
+          <View key={pick.previewId} style={styles.lockedRow}>
+            <View style={styles.lockedIcon}>
+              <LockKeyhole size={16} color={colors.muted} />
+            </View>
+            <View style={styles.lockedCopy}>
+              <Text style={styles.lockedLabel}>{pick.compatibilityLabel}</Text>
+              <Text style={styles.lockedDisclaimer}>Chỉ số tương hợp, không phải xác suất thành đôi</Text>
+            </View>
+            <Text style={styles.lockedScore}>{clamp(pick.compatibilityScore)}%</Text>
+          </View>
+        ))}
+      </View>
+      {error ? <Text style={styles.actionError}>{error}</Text> : null}
+      <Pressable disabled={busy} onPress={onUnlock} style={[styles.unlockButton, busy && styles.unlockButtonDisabled]}>
+        {busy ? <ActivityIndicator color={colors.onPrimary} /> : <LockKeyhole size={17} color={colors.onPrimary} />}
+        <Text style={styles.unlockButtonText}>
+          {busy ? 'Đang mở khóa…' : `Mở khóa giả lập · ${priceVnd.toLocaleString('vi-VN')}đ/batch`}
+        </Text>
+      </Pressable>
+      <Text style={styles.demoNote}>Bản demo không thu tiền và không tạo giao dịch thật.</Text>
+    </View>
+  );
+}
+
 function PickCard({
   match,
   onLike,
@@ -260,7 +385,7 @@ function PickCard({
   busy,
   actionError,
 }: {
-  match: CuratedMatch;
+  match: RevealedDailyPick;
   onLike: () => void;
   onSkip: () => void;
   onDecline: () => void;
@@ -271,7 +396,6 @@ function PickCard({
   const { candidate } = match;
   const school = candidate.profileText.school?.trim();
   const major = candidate.profileText.majorLabel?.trim();
-  const sub = subScores(match.compatibilityScore);
   const tags = candidate.interests.slice(0, 3);
   const initial = candidate.name.trim() ? Array.from(candidate.name.trim())[0].toUpperCase() : '?';
   const score = useCountUp(clamp(match.compatibilityScore));
@@ -337,24 +461,14 @@ function PickCard({
             end={{ x: 1, y: 1 }}
             style={styles.colorWash}
           />
-          <View style={styles.photoProgress}>
-            {Array.from({ length: 5 }).map((_, barIndex) => (
-              <View key={barIndex} style={styles.photoProgressTrack}>
-                <View style={[styles.photoProgressFill, barIndex === 0 ? styles.photoProgressActive : null]} />
-              </View>
-            ))}
-          </View>
           <View style={styles.scoreBadge}>
             <Heart size={13} color={colors.primaryText} fill={colors.primaryText} />
             <Text style={styles.scoreBadgeText}>{score}%</Text>
-            <Text style={styles.scoreBadgeSub}>độ phù hợp</Text>
+            <Text style={styles.scoreBadgeSub}>{match.compatibilityLabel}</Text>
           </View>
           <View style={styles.cardHeaderText}>
             <View style={styles.nameRow}>
-              <Text style={styles.cardName}>
-                {candidate.name}, {candidate.age}
-              </Text>
-              <Text style={styles.verified}>✓</Text>
+              <Text style={styles.cardName}>{candidate.name}, {candidate.age}</Text>
             </View>
             <Text style={styles.cardMeta}>
               {[major, school].filter(Boolean).join(' · ')}
@@ -364,20 +478,6 @@ function PickCard({
                 “{candidate.bio}”
               </Text>
             ) : null}
-            <View style={styles.cardChips}>
-              <View style={styles.heroChip}>
-                <Heart size={12} color={colors.primaryText} fill={colors.primaryText} />
-                <Text style={styles.heroChipText}>Giá trị sống</Text>
-              </View>
-              <View style={styles.heroChip}>
-                <Star size={12} color="#C99013" fill="#F9CA55" />
-                <Text style={styles.heroChipText}>Sở thích chung</Text>
-              </View>
-              <View style={styles.heroChipLavender}>
-                <Sparkles size={12} color="#9A72C7" />
-                <Text style={styles.heroChipLavenderText}>Giao tiếp tốt</Text>
-              </View>
-            </View>
           </View>
         </View>
 
@@ -410,42 +510,36 @@ function PickCard({
             <Text style={styles.reportButtonText}>Báo cáo và ẩn hồ sơ</Text>
           </Pressable>
 
-          <View style={styles.insightCard}>
-            <View style={styles.insightHead}>
-              <View style={styles.insightTitleWrap}>
-                <Sparkles size={14} color={colors.primaryStrong} />
-                <Text style={styles.insightTitle}>Lý do AI gợi ý bạn</Text>
-              </View>
-              <View style={styles.insightBadge}>
-                <Text style={styles.insightBadgeText}>AI Insight</Text>
-              </View>
-            </View>
-
-            <View style={styles.insightList}>
-              {insights.map((item, itemIndex) => (
-                <View key={`${match.id}-${itemIndex}`} style={styles.insightRow}>
-                  <View style={styles.insightIcon}>
-                    {itemIndex === 0 ? (
-                      <Heart size={12} color="#1F130D" fill="#1F130D" />
-                    ) : itemIndex === 1 ? (
-                      <Coffee size={12} color="#8D5E66" />
-                    ) : (
-                      <MessageCircle size={12} color="#9B88D6" />
-                    )}
-                  </View>
-                  <Text style={styles.insightText}>{item}</Text>
+          {insights.length > 0 ? (
+            <View style={styles.insightCard}>
+              <View style={styles.insightHead}>
+                <View style={styles.insightTitleWrap}>
+                  <Sparkles size={14} color={colors.primaryStrong} />
+                  <Text style={styles.insightTitle}>Lý do AI gợi ý bạn</Text>
                 </View>
-              ))}
-            </View>
+                <View style={styles.insightBadge}>
+                  <Text style={styles.insightBadgeText}>AI Insight</Text>
+                </View>
+              </View>
 
-            <View style={styles.subScoreRow}>
-              <Text style={styles.subScoreText}>Giá trị {sub.values}%</Text>
-              <Text style={styles.subScoreDot}>•</Text>
-              <Text style={styles.subScoreText}>Sở thích {sub.interests}%</Text>
-              <Text style={styles.subScoreDot}>•</Text>
-              <Text style={styles.subScoreText}>Tính cách {sub.personality}%</Text>
+              <View style={styles.insightList}>
+                {insights.map((item, itemIndex) => (
+                  <View key={`${match.id}-${itemIndex}`} style={styles.insightRow}>
+                    <View style={styles.insightIcon}>
+                      {itemIndex === 0 ? (
+                        <Heart size={12} color="#1F130D" fill="#1F130D" />
+                      ) : itemIndex === 1 ? (
+                        <Coffee size={12} color="#8D5E66" />
+                      ) : (
+                        <MessageCircle size={12} color="#9B88D6" />
+                      )}
+                    </View>
+                    <Text style={styles.insightText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
+          ) : null}
 
           {tags.length > 0 ? (
             <View style={styles.tags}>
@@ -476,6 +570,17 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   subtitle: { fontSize: 12.5, color: colors.muted, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  coachButton: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    backgroundColor: colors.surfaceTint,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  coachButtonText: { color: colors.primaryStrong, fontSize: 12, fontWeight: '800' },
   bell: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.surfaceTint, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 22, paddingBottom: 26, alignItems: 'center' },
   pickShell: { width: '100%', maxWidth: 430 },
@@ -495,24 +600,6 @@ const styles = StyleSheet.create({
   profilePhotoImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%' },
   photoOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   colorWash: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0.24 },
-  photoProgress: {
-    position: 'absolute',
-    top: 10,
-    left: 12,
-    right: 12,
-    zIndex: 3,
-    flexDirection: 'row',
-    gap: 5,
-  },
-  photoProgressTrack: {
-    flex: 1,
-    height: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.54)',
-  },
-  photoProgressFill: { height: '100%', width: '36%', backgroundColor: 'rgba(255, 255, 255, 0.86)' },
-  photoProgressActive: { width: '100%', backgroundColor: colors.surface },
   scoreBadge: {
     position: 'absolute',
     top: 22,
@@ -543,30 +630,8 @@ const styles = StyleSheet.create({
   cardHeaderText: { zIndex: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   cardName: { fontSize: 24, fontWeight: '800', color: colors.onPrimary },
-  verified: { fontSize: 14, color: colors.onPrimary },
   cardMeta: { fontSize: 13, color: 'rgba(255,255,255,0.95)', marginTop: 2, fontWeight: '500' },
   cardQuote: { color: colors.onPrimary, fontSize: 14, lineHeight: 19, fontWeight: '700', marginTop: 10, maxWidth: '95%' },
-  cardChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  heroChip: {
-    minHeight: 28,
-    borderRadius: radii.pill,
-    paddingHorizontal: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255, 247, 239, 0.9)',
-  },
-  heroChipText: { fontSize: 12, color: colors.primaryText, fontWeight: '800' },
-  heroChipLavender: {
-    minHeight: 28,
-    borderRadius: radii.pill,
-    paddingHorizontal: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(246, 237, 255, 0.93)',
-  },
-  heroChipLavenderText: { fontSize: 12, color: '#8B66B7', fontWeight: '800' },
 
   cardBody: { paddingHorizontal: 18, paddingTop: 54, paddingBottom: 20, backgroundColor: '#FFF9F4' },
   insightCard: {
@@ -599,9 +664,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   insightText: { flex: 1, fontSize: 13.5, lineHeight: 20, color: colors.textSoft, fontWeight: '500' },
-  subScoreRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 15 },
-  subScoreText: { fontSize: 11.5, color: colors.primaryText, fontWeight: '800' },
-  subScoreDot: { fontSize: 11, color: colors.mutedLight, fontWeight: '800' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 18 },
 
   actions: {
@@ -653,6 +715,70 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   reportButtonText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+
+  lockedPanel: {
+    width: '100%',
+    maxWidth: 430,
+    marginTop: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 18,
+  },
+  lockedHeading: { marginBottom: 14 },
+  lockedTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  lockedTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  lockedBody: { color: colors.muted, fontSize: 12.5, lineHeight: 18 },
+  lockedList: { gap: 9, marginBottom: 16 },
+  lockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceTint,
+  },
+  lockedIcon: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  lockedCopy: { flex: 1 },
+  lockedLabel: { color: colors.text, fontWeight: '800', fontSize: 13 },
+  lockedDisclaimer: { color: colors.muted, fontSize: 10.5, lineHeight: 14, marginTop: 2 },
+  lockedScore: { color: colors.primaryStrong, fontSize: 18, fontWeight: '900' },
+  unlockButton: {
+    minHeight: 48,
+    borderRadius: 15,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  unlockButtonDisabled: { opacity: 0.65 },
+  unlockButtonText: { color: colors.onPrimary, fontWeight: '800', fontSize: 13, textAlign: 'center' },
+  demoNote: { color: colors.muted, fontSize: 10.5, textAlign: 'center', marginTop: 8 },
+
+  modalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(31, 19, 13, 0.42)',
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 390,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    padding: 22,
+  },
+  modalTitle: { color: colors.text, fontSize: 19, fontWeight: '900', marginBottom: 8 },
+  modalBody: { color: colors.textSoft, fontSize: 14, lineHeight: 21 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 },
+  modalCancelButton: { borderRadius: 13, paddingHorizontal: 16, paddingVertical: 11 },
+  modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
+  modalConfirmButton: { borderRadius: 13, paddingHorizontal: 16, paddingVertical: 11, backgroundColor: colors.primary },
+  modalConfirmText: { color: colors.onPrimary, fontSize: 13, fontWeight: '800' },
 
   empty: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 24 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 6 },

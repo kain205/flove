@@ -1854,15 +1854,13 @@ select ok(
   'embedding queue coalesces stale profile revisions into one latest FIFO job'
 );
 
--- FPT is enforced independently at profile writes, profile discovery and
--- Storage avatar writes. Service-role/direct migration writes remain available.
+-- Open signup accepts any plausible verified email. Identity-bearing discovery
+-- is no longer directly enumerable; server DTOs remain the only cross-user path.
 set local role authenticated;
-select ok(
-  exists (
-    select 1 from public.public_profiles
-    where id = '90000000-0000-0000-0000-000000000026'
-  ),
-  'an authenticated FPT account can enumerate eligible public profiles'
+select throws_like(
+  $$ select count(*) from public.public_profiles $$,
+  '%permission denied%',
+  'authenticated clients cannot enumerate the internal public profile view'
 );
 select lives_ok(
   $$
@@ -1873,7 +1871,7 @@ select lives_ok(
       '90000000-0000-0000-0000-000000000026'
     )
   $$,
-  'an FPT JWT can write its owner-scoped avatar object'
+  'an authenticated owner can write an owner-scoped avatar object'
 );
 reset role;
 
@@ -1889,22 +1887,20 @@ select set_config(
 select set_config('request.jwt.claim.email', 'outsider@example.com', true);
 
 set local role authenticated;
-select throws_ok(
+select lives_ok(
   $$
     update public.profiles
-    set name = 'Must be rejected'
+    set name = 'Open signup profile update'
     where id = '90000000-0000-0000-0000-000000000027'
   $$,
-  '42501',
-  'Only FPT accounts may write profiles',
-  'a non-FPT authenticated account cannot update its profile'
-);
-select is(
-  (select count(*) from public.public_profiles),
-  0::bigint,
-  'a non-FPT authenticated account cannot enumerate public profiles'
+  'a verified non-FPT account can update its own profile'
 );
 select throws_like(
+  $$ select count(*) from public.public_profiles $$,
+  '%permission denied%',
+  'open signup does not reopen direct cross-user profile enumeration'
+);
+select lives_ok(
   $$
     insert into storage.objects(bucket_id, name, owner)
     values (
@@ -1913,8 +1909,7 @@ select throws_like(
       '90000000-0000-0000-0000-000000000027'
     )
   $$,
-  '%row-level security policy for table "objects"%',
-  'a non-FPT JWT cannot upload an avatar object'
+  'a verified non-FPT owner can upload an owner-scoped avatar object'
 );
 reset role;
 
@@ -1931,58 +1926,46 @@ values (
   'FPT-authored compatibility fixture'
 );
 
--- The signup hook cannot retroactively remove legacy Auth rows. Every public
--- user mutation/read RPC therefore repeats canonical Auth-domain admission.
+-- The historical admission helper name remains, but it now fences a verified
+-- authenticated user rather than an email domain.
 set local role authenticated;
-select throws_ok(
-  $$
-    select count(*) from public.messages
-    where conversation_id = 'behavior-non-fpt-compatibility'
-  $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT participant cannot use direct message compatibility reads'
+select is(
+  (select count(*) from public.messages
+   where conversation_id = 'behavior-non-fpt-compatibility'),
+  1::bigint,
+  'a non-FPT participant can use the revealed-message compatibility read'
 );
-select throws_ok(
+select lives_ok(
   $$
     insert into public.messages(conversation_id, sender_id, content)
     values (
-      'behavior-non-fpt-compatibility', auth.uid(), 'must be blocked'
+      'behavior-non-fpt-compatibility', auth.uid(), 'open signup message'
     )
   $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT participant cannot use direct message compatibility writes'
+  'a non-FPT participant can use the revealed-message compatibility write'
 );
-select throws_ok(
+select lives_ok(
   $$
     insert into public.reports(reporter_id, reported_user_id, reason)
     values (
-      auth.uid(), '90000000-0000-0000-0000-000000000026', 'must be blocked'
+      auth.uid(), '90000000-0000-0000-0000-000000000026', 'open signup report'
     )
   $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot create direct reports'
+  'a non-FPT account can create an owner-scoped report'
 );
-select throws_ok(
+select lives_ok(
   $$
     insert into public.blocks(blocker_id, blocked_user_id, reason)
     values (
-      auth.uid(), '90000000-0000-0000-0000-000000000026', 'must be blocked'
+      auth.uid(), '90000000-0000-0000-0000-000000000026', 'open signup block'
     )
   $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot create direct blocks'
+  'a non-FPT account can create an owner-scoped block'
 );
-select throws_ok(
-  $$
-    select * from public.save_onboarding_draft('{}'::jsonb, null, 2, auth.uid())
-  $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot invoke onboarding RPCs'
+select is(
+  private.assert_fpt_self_admission(),
+  '90000000-0000-0000-0000-000000000027'::uuid,
+  'the canonical admission helper accepts a verified non-FPT account'
 );
 select throws_ok(
   $$
@@ -1990,15 +1973,13 @@ select throws_ok(
       'missing-match', 'skipped', 'legacy-non-fpt-feedback', '{}'::text[], ''
     )
   $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot invoke feedback RPCs'
+  'P0002',
+  'Curated match not found',
+  'a non-FPT account reaches normal feedback validation after admission'
 );
-select throws_ok(
+select lives_ok(
   $$ select * from public.find_blind_date_partner_atomic('Legacy outsider') $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot invoke Blind Date RPCs'
+  'a non-FPT account can invoke Blind Date RPCs'
 );
 select throws_ok(
   $$
@@ -2007,18 +1988,17 @@ select throws_ok(
     )
   $$,
   '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot invoke message RPCs'
+  'Conversation access denied',
+  'a non-FPT account reaches normal participant validation in message RPCs'
 );
-select throws_ok(
+select throws_like(
   $$
     select * from public.save_preference_chat_turn_atomic(
       'hello', '{}'::text[], 'reply', 'legacy-non-fpt-preference'
     )
   $$,
-  '42501',
-  'Only FPT accounts may access F-Love',
-  'a legacy non-FPT account cannot invoke preference RPCs'
+  '%permission denied%',
+  'the legacy caller-authored preference assistant RPC is unavailable to every client'
 );
 reset role;
 
@@ -2051,7 +2031,7 @@ select set_config(
 select set_config('request.jwt.claim.email', 'new-outsider@example.com', true);
 
 set local role authenticated;
-select throws_ok(
+select lives_ok(
   $$
     insert into public.profiles(id, email, name, age, major, campus)
     values (
@@ -2063,9 +2043,7 @@ select throws_ok(
       'HCM'
     )
   $$,
-  '42501',
-  'Only FPT accounts may write profiles',
-  'a non-FPT authenticated account cannot create a profile'
+  'a verified non-FPT authenticated account can create its own profile'
 );
 reset role;
 
@@ -2253,13 +2231,14 @@ select is(
     'user', jsonb_build_object('email', 'new.student@fpt.edu.vn')
   )),
   '{}'::jsonb,
-  'Before User Created auth hook allows an FPT email'
+  'Before User Created auth hook allows a plausible email'
 );
-select ok(
+select is(
   public.before_user_created_require_fpt(jsonb_build_object(
     'user', jsonb_build_object('email', 'outsider@example.com')
-  )) #>> '{error,http_code}' = '403',
-  'Before User Created auth hook rejects a non-FPT email with HTTP 403'
+  )),
+  '{}'::jsonb,
+  'Before User Created auth hook allows a plausible non-FPT email'
 );
 
 select * from finish();

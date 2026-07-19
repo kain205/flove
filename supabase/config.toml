@@ -63,6 +63,9 @@ verify_jwt = true
 [functions.send-preference-chat-message]
 verify_jwt = true
 
+[functions.ask-conversation-wingman]
+verify_jwt = true
+
 [functions.find-blind-date-partner]
 verify_jwt = true
 

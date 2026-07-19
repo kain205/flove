@@ -115,7 +115,7 @@ export default function ProfileScreen() {
         </View>
 
         <Button variant="light" onPress={() => router.push('/onboarding?mode=edit')}>Cập nhật gu ghép đôi</Button>
-        <Button variant="light" onPress={() => router.push('/preference-chat')}>Trò chuyện để tinh chỉnh AI Picks</Button>
+        <Button variant="light" onPress={() => router.push('/preference-chat')}>Mở F-Love AI Coach</Button>
         <Button onPress={handleSave}>Lưu hồ sơ</Button>
         <Button variant="secondary" onPress={() => void signOut()}>Đăng xuất</Button>
       </ScrollView>

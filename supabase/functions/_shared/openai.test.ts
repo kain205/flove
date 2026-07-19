@@ -67,6 +67,56 @@ Deno.test("malformed structured JSON falls back through a typed provider error",
   );
 });
 
+Deno.test("structured responses disable provider-side response storage", async () => {
+  let requestBody: Record<string, unknown> = {};
+  await withFetch(
+    (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Promise.resolve(
+        new Response(JSON.stringify({ output_text: JSON.stringify({ ok: true }) }), {
+          status: 200,
+        }),
+      );
+    },
+    async () => {
+      await structuredResponse({
+        apiKey: "test",
+        model: "configured-model",
+        system: "test",
+        user: {},
+        schemaName: "test",
+        schema: { type: "object" },
+        deadlineMs: 500,
+      });
+    },
+  );
+  assert(requestBody.store === false, "Expected Responses API store=false.");
+  assert(requestBody.model === "configured-model", "Expected the caller-configured model.");
+});
+
+Deno.test("structured responses expose an explicit provider refusal", async () => {
+  await withFetch(
+    () => Promise.resolve(new Response(JSON.stringify({
+      status: "completed",
+      output: [{
+        type: "message",
+        content: [{ type: "refusal", refusal: "I cannot help with that." }],
+      }],
+    }), { status: 200 })),
+    async () => {
+      await rejects(() => structuredResponse({
+        apiKey: "test",
+        model: "test",
+        system: "test",
+        user: {},
+        schemaName: "test",
+        schema: { type: "object" },
+        deadlineMs: 500,
+      }), /refused the structured response/i);
+    },
+  );
+});
+
 Deno.test("429 is retried at most once inside the deadline", async () => {
   let attempts = 0;
   await withFetch(() => {

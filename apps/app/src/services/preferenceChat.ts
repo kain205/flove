@@ -1,5 +1,11 @@
-import { getPreferenceChatMessages, sendPreferenceChatMessage } from '@flove/supabase';
+import {
+  getPreferenceChatMessages,
+  sendPreferenceChatMessage,
+  type PreferenceCoachResult,
+} from '@flove/supabase';
 import { supabase } from '@/lib/supabase';
+
+export type { PreferenceCoachResult };
 
 export const preferenceChatQueryKey = (userId: string | null | undefined) =>
   ['preference-chat-messages', userId ?? 'anonymous'] as const;

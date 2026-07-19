@@ -1,6 +1,6 @@
 import { errorResponse, expectedUserFenceResponse, jsonObjectBody, jsonResponse, requireUser, rpcErrorResponse } from '../_shared/client.ts';
 
-const names = ['Anonymous FPT Student', 'Quiet Coder', 'Campus Explorer', 'Coffee Match'];
+const names = ['Anonymous Student', 'Quiet Coder', 'Campus Explorer', 'Coffee Match'];
 
 Deno.serve(async req => {
   const startedAt = performance.now();

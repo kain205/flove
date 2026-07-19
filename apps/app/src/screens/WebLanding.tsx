@@ -3,7 +3,6 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { BrandMark } from '@/components/BrandMark';
-import { MeterBar } from '@/components/MeterBar';
 import { colors, fonts, gradients, radii } from '@/theme';
 
 const MAX_WIDTH = 1180;
@@ -158,11 +157,10 @@ function PhoneMockup() {
             <View style={styles.pickMeters}>
               <View style={styles.pickMeterHead}>
                 <Text style={{ fontSize: 11 }}>✨</Text>
-                <Text style={styles.pickMeterTitle}>Phân tích tương hợp</Text>
+                <Text style={styles.pickMeterTitle}>Tiềm năng mạnh</Text>
               </View>
-              <MeterBar label="Giá trị sống" value={87} />
-              <MeterBar label="Sở thích" value={92} />
-              <MeterBar label="Tính cách" value={89} />
+              <Text style={styles.pickInsight}>Hai bạn có nhiều tín hiệu phù hợp để bắt đầu tìm hiểu.</Text>
+              <Text style={styles.pickDisclaimer}>96% là chỉ số xếp hạng, không phải xác suất thành đôi.</Text>
             </View>
           </View>
           <View style={styles.pickActions}>
@@ -261,19 +259,16 @@ export function WebLanding() {
       <View style={styles.section}>
         <View style={styles.sectionHead}>
           <Eyebrow>Gói dịch vụ</Eyebrow>
-          <Text style={styles.h2}>Chọn gói phù hợp với cách bạn muốn được ghép đôi</Text>
+          <Text style={styles.h2}>Trải nghiệm AI Picks miễn phí trong giai đoạn beta</Text>
         </View>
         <View style={styles.pricingGrid}>
-          <PricingCard icon="▰" title="Normal Pack" price="99.000đ" lines={['1 lần setup matching']} />
-          <PricingCard icon="◇" title="Premium Pack" price="299.000đ" lines={['3 setups', 'Wingman AI Consultation']} featured />
-          <PricingCard icon="❤" title="Love Coach Pack" price="699.000đ" lines={['5 setups', 'Premium features', 'Profile/Chat reviews per setup']} />
-        </View>
-        <View style={styles.revenueRow}>
-          <Text style={styles.revenueTitle}>Revenue{'\n'}Streams</Text>
-          <View style={styles.trialBox}>
-            <Text style={styles.trialText}>We are offering free trials, please fill in this form</Text>
-            <Text style={styles.trialLink}>https://forms.gle/XNUJBFMU8osCoxG7</Text>
-          </View>
+          <PricingCard
+            icon="✨"
+            title="AI Picks Beta"
+            price="Đang mở miễn phí"
+            lines={['Xem đầy đủ batch gợi ý trong giai đoạn beta', 'Dự kiến 100.000đ/batch khi chính thức bật thanh toán']}
+            featured
+          />
         </View>
       </View>
 
@@ -475,6 +470,8 @@ const styles = StyleSheet.create({
   pickMeters: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 14, gap: 9 },
   pickMeterHead: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 1 },
   pickMeterTitle: { fontSize: 10.5, fontWeight: '800', color: colors.text },
+  pickInsight: { color: colors.textSoft, fontSize: 10.5, lineHeight: 15, fontWeight: '600' },
+  pickDisclaimer: { color: colors.muted, fontSize: 8.5, lineHeight: 12 },
   pickActions: { flexDirection: 'row', gap: 12, justifyContent: 'center', marginTop: 12 },
   skipBtn: {
     width: 46,
@@ -546,36 +543,6 @@ const styles = StyleSheet.create({
   pricingLines: { gap: 5 },
   pricingLine: { fontSize: 20, lineHeight: 28, fontWeight: '800', color: colors.text },
   pricingTextFeatured: { color: colors.onPrimary },
-  revenueRow: {
-    marginTop: 44,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 28,
-    alignItems: 'center',
-  },
-  revenueTitle: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 260,
-    fontSize: 46,
-    lineHeight: 52,
-    fontWeight: '900',
-    color: '#111111',
-  },
-  trialBox: {
-    flexGrow: 2,
-    flexShrink: 1,
-    flexBasis: 420,
-    borderWidth: 2,
-    borderColor: '#211C18',
-    borderRadius: 22,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    backgroundColor: colors.surface,
-  },
-  trialText: { fontSize: 20, lineHeight: 29, color: colors.text },
-  trialLink: { fontSize: 20, lineHeight: 29, fontWeight: '900', color: '#111111' },
-
   // HOW
   howCard: { borderRadius: 32, borderWidth: 1, borderColor: '#F9E6C8', paddingVertical: 56, paddingHorizontal: 48 },
   stepGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 32, justifyContent: 'center' },

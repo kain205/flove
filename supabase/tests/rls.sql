@@ -1,6 +1,6 @@
 begin;
 
-select plan(77);
+select plan(78);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'conversation_participants', 'conversation participants table exists');
@@ -160,11 +160,11 @@ select has_function(
 );
 select has_function(
   'public', 'before_user_created_require_fpt', array['jsonb'],
-  'Before User Created FPT auth hook exists'
+  'Before User Created verified-email auth hook exists'
 );
 select has_function(
   'private', 'assert_fpt_self_admission', array[]::text[],
-  'canonical FPT self-admission helper exists'
+  'canonical self-admission helper exists under its compatibility name'
 );
 select ok(
   has_schema_privilege('authenticated', 'private', 'USAGE')
@@ -179,7 +179,7 @@ select ok(
   and not has_function_privilege(
     'service_role', 'private.assert_fpt_self_admission()', 'EXECUTE'
   ),
-  'the private FPT helper is available to authenticated RLS but not exposed in an API schema'
+  'the private admission helper is available to authenticated RLS but not exposed in an API schema'
 );
 select ok(
   has_function_privilege(
@@ -194,7 +194,7 @@ select ok(
   and not has_function_privilege(
     'service_role', 'public.before_user_created_require_fpt(jsonb)', 'EXECUTE'
   ),
-  'only the Supabase Auth hook role can execute the FPT signup gate'
+  'only the Supabase Auth hook role can execute the verified-email signup gate'
 );
 select is_empty(
   $$
@@ -204,14 +204,16 @@ select is_empty(
         ('public.find_blind_date_partner_atomic(text)'),
         ('public.get_blind_date_session(text)'),
         ('public.get_blind_date_session_for_conversation(text)'),
+        ('public.get_conversation_wingman_context(text,uuid,integer)'),
+        ('public.get_preference_coach_context(uuid,integer)'),
         ('public.list_conversation_messages(text,integer)'),
         ('public.mark_conversation_read(text)'),
         ('public.match_pair_live_eligible(uuid,uuid)'),
         ('public.request_reveal_atomic(text,uuid)'),
         ('public.save_onboarding_draft(jsonb,bigint,integer,uuid)'),
-        ('public.save_preference_chat_turn_atomic(text,text[],text,text)'),
         ('public.send_message_atomic(text,text,text,uuid)'),
-        ('public.submit_match_feedback_atomic(text,public.feedback_decision,text,text[],text)')
+        ('public.submit_match_feedback_atomic(text,public.feedback_decision,text,text[],text)'),
+        ('public.unlock_daily_match_batch(text,text,uuid)')
     )
     select signature
     from admitted_rpc
@@ -221,7 +223,7 @@ select is_empty(
          in pg_get_functiondef(to_regprocedure(signature))
        ) = 0
   $$,
-  'every authenticated user RPC except the harmless business-date helper enforces FPT admission'
+  'every authenticated user RPC except the harmless business-date helper enforces canonical admission'
 );
 select ok(
   (
@@ -242,13 +244,13 @@ select isnt_empty(
       and lower(coalesce(with_check, '')) like '%bucket_id = ''avatars''%'
       and lower(coalesce(with_check, '')) like '%owner = auth.uid()%'
       and lower(coalesce(with_check, '')) like '%split_part%name%auth.uid()%'
-      and lower(coalesce(with_check, '')) like '%auth.jwt()%'
-      and lower(coalesce(with_check, '')) like '%email%'
-      and lower(coalesce(with_check, '')) like '%fpt%edu%vn%'
+      and lower(coalesce(with_check, '')) like '%assert_fpt_self_admission%auth.uid()%'
+      and lower(coalesce(with_check, '')) not like '%auth.jwt()%'
+      and lower(coalesce(with_check, '')) not like '%fpt%edu%vn%'
     group by schemaname, tablename
     having count(*) = 2
   $$,
-  'avatar insert and update policies require owner UUID/path scope and an FPT JWT email'
+  'avatar insert and update policies require owner UUID/path scope without a domain gate'
 );
 select ok(
   not has_table_privilege('authenticated', 'public.blind_date_sessions', 'SELECT'),
@@ -260,8 +262,9 @@ select ok(
 );
 select ok(
   not has_table_privilege('anon', 'public.public_profiles', 'SELECT')
-  and has_table_privilege('authenticated', 'public.public_profiles', 'SELECT'),
-  'public profile discovery is authenticated-only'
+  and not has_table_privilege('authenticated', 'public.public_profiles', 'SELECT')
+  and has_table_privilege('service_role', 'public.public_profiles', 'SELECT'),
+  'identity-bearing public profile discovery is service-only'
 );
 select is_empty(
   $$
@@ -315,12 +318,18 @@ select is_empty(
   $$
     with service_only(signature) as (
       values
+        ('public.abandon_ai_assistant_request(text,text,text,uuid,uuid)'),
+        ('public.claim_ai_assistant_request(text,text,text,uuid)'),
+        ('public.finalize_ai_assistant_request(text,text,text,uuid,jsonb,uuid)'),
+        ('public.finalize_preference_coach_request(text,text,uuid,text,jsonb,boolean,uuid)'),
+        ('public.mark_ai_assistant_provider_started(text,text,text,uuid,uuid)'),
         ('public.save_onboarding_analysis(uuid,bigint,jsonb,text)'),
         ('public.enqueue_ai_job(jsonb,text,integer)'),
         ('public.read_ai_jobs(integer,integer)'),
         ('public.delete_ai_job(bigint)'),
         ('public.archive_ai_job(bigint)'),
         ('public.get_daily_match_rows_v2(uuid,text)'),
+        ('public.get_daily_picks_safe(uuid,text)'),
         ('public.get_match_candidates(uuid,integer)'),
         ('public.get_match_candidates_v2(uuid,integer,integer)'),
         ('public.get_match_filter_metrics(uuid,integer)'),
@@ -332,7 +341,8 @@ select is_empty(
         ('public.complete_profile_embedding_job(uuid,bigint,jsonb,text)'),
         ('public.complete_daily_match_enrichment(text,integer,jsonb,text)'),
         ('public.confirm_onboarding_profile_atomic(uuid,bigint,bigint,jsonb)'),
-        ('public.get_backend_v2_alerts()')
+        ('public.get_backend_v2_alerts()'),
+        ('public.repair_daily_match_teaser(text)')
     ), resolved as (
       select signature, to_regprocedure(signature) as procedure_oid
       from service_only
@@ -374,14 +384,16 @@ select ok(
         ('public.flove_business_date()'),
         ('public.get_blind_date_session(text)'),
         ('public.get_blind_date_session_for_conversation(text)'),
+        ('public.get_conversation_wingman_context(text,uuid,integer)'),
+        ('public.get_preference_coach_context(uuid,integer)'),
         ('public.list_conversation_messages(text,integer)'),
         ('public.mark_conversation_read(text)'),
         ('public.match_pair_live_eligible(uuid,uuid)'),
         ('public.request_reveal_atomic(text,uuid)'),
         ('public.save_onboarding_draft(jsonb,bigint,integer,uuid)'),
-        ('public.save_preference_chat_turn_atomic(text,text[],text,text)'),
         ('public.send_message_atomic(text,text,text,uuid)'),
-        ('public.submit_match_feedback_atomic(text,public.feedback_decision,text,text[],text)')
+        ('public.submit_match_feedback_atomic(text,public.feedback_decision,text,text[],text)'),
+        ('public.unlock_daily_match_batch(text,text,uuid)')
     ), expected_oids as (
       select array_agg(to_regprocedure(signature)::oid order by to_regprocedure(signature)::oid) as oids
       from expected
@@ -429,7 +441,15 @@ select has_trigger(
 );
 select has_function(
   'public', 'save_preference_chat_turn_atomic', array['text', 'text[]', 'text', 'text'],
-  'atomic preference chat turn exists'
+  'legacy atomic preference chat symbol remains for migration compatibility'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.save_preference_chat_turn_atomic(text,text[],text,text)',
+    'EXECUTE'
+  ),
+  'legacy caller-authored preference assistant writes are denied to clients'
 );
 select has_function(
   'public', 'send_message_atomic', array['text', 'text', 'text', 'uuid'],

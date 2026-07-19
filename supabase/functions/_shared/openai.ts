@@ -20,11 +20,30 @@ export class OpenAIRequestError extends Error {
   }
 }
 
+/** A safety refusal is a valid provider response, but not structured product data. */
+export class OpenAIRefusalError extends OpenAIRequestError {
+  constructor(message = 'OpenAI refused the structured response.') {
+    super(message, { retryable: false });
+    this.name = 'OpenAIRefusalError';
+  }
+}
+
 export function extractOutputText(response: any): string {
   if (typeof response.output_text === 'string') return response.output_text;
   for (const item of response.output ?? []) {
     for (const content of item.content ?? []) {
       if (content.type === 'output_text' && typeof content.text === 'string') return content.text;
+    }
+  }
+  return '';
+}
+
+export function extractRefusal(response: any): string {
+  for (const item of response?.output ?? []) {
+    for (const content of item?.content ?? []) {
+      if (content?.type === 'refusal' && typeof content.refusal === 'string') {
+        return content.refusal.trim();
+      }
     }
   }
   return '';
@@ -127,11 +146,24 @@ export async function structuredResponse(opts: {
         { role: 'system', content: opts.system },
         { role: 'user', content: typeof opts.user === 'string' ? opts.user : JSON.stringify(opts.user) },
       ],
+      // F-Love never resumes provider-side response state. Keeping this false
+      // avoids the Responses API's default application-state retention.
+      store: false,
       text: { format: { type: 'json_schema', name: opts.schemaName, strict: true, schema: opts.schema } },
       max_output_tokens: Math.max(128, Math.min(4_000, opts.maxOutputTokens ?? 3_000)),
     }),
   }, opts);
   const json = await res.json();
+  const refusal = extractRefusal(json);
+  if (refusal) throw new OpenAIRefusalError();
+  if (json?.status === 'incomplete') {
+    const reason = typeof json?.incomplete_details?.reason === 'string'
+      ? json.incomplete_details.reason
+      : 'unknown';
+    throw new OpenAIRequestError(`OpenAI returned an incomplete structured response (${reason}).`, {
+      retryable: false,
+    });
+  }
   const output = extractOutputText(json);
   if (!output) throw new OpenAIRequestError('OpenAI returned an empty structured response.', { retryable: false });
   try {

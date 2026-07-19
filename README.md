@@ -6,11 +6,11 @@ F-Love is an AI-curated dating app for students. Instead of swipe-based discover
 
 | Feature | Description |
 | --- | --- |
-| AI Picks | 3-5 curated recommendations per day with compatibility reasons |
-| Preference Feedback | Accept, decline, skip, report, and preference chat signals improve future picks |
-| Messages | Direct chat after mutual accept |
+| AI Picks | Up to five curated recommendations with one overall compatibility index, its backend label, and data-backed reasons |
+| F-Love AI Coach | Private Vietnamese preference coaching that maintains preferred and avoided soft traits |
+| Messages + Wingman | Direct chat after mutual accept, with three private draft suggestions that never auto-send |
 | Blind Date | Optional anonymous chat flow kept separate from AI Picks |
-| Profile | FPT student profile, bio, campus, major, interests, and avatar |
+| Profile | Verified-email student profile, bio, campus, major, interests, and avatar |
 
 ## Tech Stack
 
@@ -51,7 +51,7 @@ npm run build:packages
 The backend contract lives in `supabase/`:
 
 - `supabase/migrations`: Postgres schema, RLS, storage policies, and RPC transactions.
-- `supabase/functions`: Edge Functions for AI Picks, feedback, mutual accept, preference chat, Blind Date, and reveal.
+- `supabase/functions`: Edge Functions for AI Picks, feedback, mutual accept, AI Coach, private Wingman, Blind Date, and reveal.
 - `supabase/seed.sql`: optional seed users/profiles for non-production environments.
 - `supabase/tests`: database contract tests when the Supabase CLI test runner is available.
 
@@ -79,6 +79,11 @@ npm run supabase:test
 
 Keep OpenAI keys and service-role keys only in Supabase secrets/Edge Function environment, never in `EXPO_PUBLIC_*`.
 
+AI Picks currently runs in server-controlled `open` mode, so beta users see the full batch for free.
+The additive backend also supports a test-only `stub` mode with one trial reveal and an idempotent
+simulated whole-batch unlock priced at 100,000 VND. It does not integrate a payment gateway or record
+a real purchase.
+
 Configure Supabase Auth redirect URLs in the Dashboard:
 
 - `flove://auth/callback`
@@ -96,7 +101,7 @@ Pushes to `main` on `kain205/flove` auto-deploy; `npx vercel deploy --prod` depl
 
 ## Seed Data
 
-AI Picks reads candidates from Supabase `public_profiles`. Optional seed profiles are defined in:
+AI Picks generates candidates through a service-only filtered RPC. Optional seed profiles are defined in:
 
 ```bash
 supabase/seed.sql

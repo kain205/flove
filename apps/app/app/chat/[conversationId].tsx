@@ -8,6 +8,7 @@ import {
   type ConversationMessage,
 } from '@flove/supabase';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Sparkles } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,6 +25,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Avatar } from '@/components/Avatar';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import {
+  askConversationWingman,
+  newWingmanRequestId,
+  type WingmanRequest,
+} from '@/services/wingman';
 import { colors, gradients, radii } from '@/theme';
 
 async function loadMessages(conversationId: string) {
@@ -52,6 +58,9 @@ export default function ChatScreen() {
   const { session } = useAuth();
   const myId = session?.user?.id;
   const [content, setContent] = useState('');
+  const [wingmanOpen, setWingmanOpen] = useState(false);
+  const [wingmanSuggestions, setWingmanSuggestions] = useState<[string, string, string] | null>(null);
+  const [failedWingman, setFailedWingman] = useState<{ input: WingmanRequest; message: string } | null>(null);
   const pendingSendRef = useRef<{ content: string; clientMessageId: string; userId: string } | null>(null);
   const markedReadVersionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
@@ -59,9 +68,12 @@ export default function ChatScreen() {
 
   useEffect(() => {
     setContent('');
+    setWingmanOpen(false);
+    setWingmanSuggestions(null);
+    setFailedWingman(null);
     pendingSendRef.current = null;
     markedReadVersionRef.current = null;
-  }, [myId]);
+  }, [conversationId, myId]);
 
   const query = useQuery({
     queryKey: ['messages', myId, conversationId],
@@ -111,6 +123,9 @@ export default function ChatScreen() {
       if (input.userId !== myId) return;
       pendingSendRef.current = null;
       setContent('');
+      setWingmanOpen(false);
+      setWingmanSuggestions(null);
+      setFailedWingman(null);
       void queryClient.invalidateQueries({ queryKey: ['messages', myId, conversationId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations', myId] });
     },
@@ -119,6 +134,68 @@ export default function ChatScreen() {
       Alert.alert('Chưa gửi được tin nhắn', error instanceof Error ? error.message : 'Vui lòng thử lại.');
     },
   });
+  const wingmanMutation = useMutation({
+    mutationFn: askConversationWingman,
+    retry: false,
+    onSuccess: (result, input) => {
+      if (input.userId !== myId || input.conversationId !== conversationId) return;
+      setWingmanSuggestions(result.suggestions);
+      setFailedWingman(null);
+    },
+    onError: (error, input) => {
+      if (input.userId !== myId || input.conversationId !== conversationId) return;
+      setFailedWingman({
+        input,
+        message: error instanceof Error
+          ? error.message
+          : 'Wingman chưa tạo được gợi ý. Nội dung đang soạn của bạn vẫn được giữ nguyên.',
+      });
+    },
+  });
+
+  const requestWingman = () => {
+    if (!myId || !conversationId || wingmanMutation.isPending) return;
+    const draft = content.trim();
+    const retryInput = failedWingman?.input.userId === myId
+      && failedWingman.input.conversationId === conversationId
+      && failedWingman.input.draft === draft
+      ? failedWingman.input
+      : null;
+    const input = retryInput ?? {
+      conversationId,
+      draft,
+      idempotencyKey: newWingmanRequestId(),
+      userId: myId,
+    };
+    if (!retryInput) setFailedWingman(null);
+    setWingmanSuggestions(null);
+    wingmanMutation.mutate(input);
+  };
+
+  const toggleWingman = () => {
+    const nextOpen = !wingmanOpen;
+    setWingmanOpen(nextOpen);
+    const unrevealedBlindDate = Boolean(blindSessionQuery.data && !blindSessionQuery.data.isRevealed);
+    if (nextOpen && !unrevealedBlindDate && !wingmanSuggestions && !failedWingman && !wingmanMutation.isPending) {
+      requestWingman();
+    }
+  };
+
+  const chooseSuggestion = (suggestion: string) => {
+    const apply = () => setContent(suggestion);
+    if (content.trim() && content.trim() !== suggestion) {
+      Alert.alert(
+        'Thay nội dung đang soạn?',
+        'Gợi ý chỉ được điền vào ô soạn và sẽ không tự gửi.',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Thay nội dung', onPress: apply },
+        ],
+      );
+      return;
+    }
+    apply();
+  };
 
   const submit = () => {
     const trimmed = content.trim();
@@ -139,10 +216,19 @@ export default function ChatScreen() {
           <Text style={styles.back}>‹</Text>
         </Pressable>
         <Avatar name="Match" size={42} />
-        <View>
+        <View style={styles.headerCopy}>
           <Text style={styles.headerName}>Cuộc trò chuyện</Text>
           <Text style={styles.headerStatus}>● Đang hoạt động</Text>
         </View>
+        <Pressable
+          accessibilityLabel={wingmanOpen ? 'Đóng Wingman' : 'Mở Wingman'}
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={toggleWingman}
+          style={({ pressed }) => [styles.wingmanHeaderButton, wingmanOpen && styles.wingmanHeaderButtonActive, pressed && styles.pressed]}
+        >
+          <Sparkles color={wingmanOpen ? colors.onPrimary : colors.primaryText} size={18} />
+        </Pressable>
       </View>
 
       {query.isLoading ? (
@@ -221,6 +307,58 @@ export default function ChatScreen() {
         </ScrollView>
       )}
 
+      {wingmanOpen ? (
+        <View accessibilityLabel="Wingman riêng tư" style={styles.wingmanPanel}>
+          <View style={styles.wingmanPanelHeader}>
+            <View style={styles.wingmanTitleRow}>
+              <Sparkles color={colors.primaryText} size={16} />
+              <Text style={styles.wingmanTitle}>Wingman</Text>
+            </View>
+            <Text style={styles.wingmanPrivate}>Chỉ mình bạn thấy</Text>
+          </View>
+
+          {blindSessionQuery.data && !blindSessionQuery.data.isRevealed ? (
+            <Text style={styles.wingmanBody}>
+              Wingman chỉ khả dụng sau khi cả hai đã đồng ý tiết lộ trong Blind Date.
+            </Text>
+          ) : wingmanMutation.isPending ? (
+            <View style={styles.wingmanLoading}>
+              <ActivityIndicator color={colors.primary} size="small" />
+              <Text style={styles.wingmanBody}>Đang chuẩn bị ba cách trả lời…</Text>
+            </View>
+          ) : failedWingman ? (
+            <View style={styles.wingmanError}>
+              <Text accessibilityRole="alert" style={styles.wingmanBody}>{failedWingman.message}</Text>
+              <Pressable accessibilityRole="button" onPress={requestWingman} style={({ pressed }) => pressed && styles.pressed}>
+                <Text style={styles.retryText}>Thử lại với yêu cầu này</Text>
+              </Pressable>
+            </View>
+          ) : wingmanSuggestions ? (
+            <View style={styles.wingmanSuggestionList}>
+              {wingmanSuggestions.map((suggestion, index) => (
+                <Pressable
+                  accessibilityHint="Chỉ điền vào ô soạn, không tự gửi"
+                  accessibilityRole="button"
+                  key={`${index}:${suggestion}`}
+                  onPress={() => chooseSuggestion(suggestion)}
+                  style={({ pressed }) => [styles.wingmanSuggestion, pressed && styles.pressed]}
+                >
+                  <Text style={styles.wingmanSuggestionText}>{suggestion}</Text>
+                </Pressable>
+              ))}
+              <Pressable accessibilityRole="button" onPress={requestWingman} style={({ pressed }) => [styles.wingmanRefresh, pressed && styles.pressed]}>
+                <Text style={styles.wingmanRefreshText}>Tạo ba gợi ý khác</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={requestWingman} style={styles.wingmanPrimaryButton}>
+              <Text style={styles.wingmanPrimaryText}>Gợi ý câu trả lời</Text>
+            </Pressable>
+          )}
+          <Text style={styles.wingmanFootnote}>Chạm một gợi ý để điền vào ô soạn. Wingman không bao giờ tự gửi.</Text>
+        </View>
+      ) : null}
+
       <View style={styles.inputBar}>
         <TextInput
           value={content}
@@ -254,8 +392,19 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   back: { fontSize: 30, color: colors.primaryStrong, lineHeight: 30, paddingRight: 4 },
+  headerCopy: { flex: 1 },
   headerName: { fontWeight: '700', fontSize: 15, color: colors.text },
   headerStatus: { fontSize: 11.5, color: colors.online, fontWeight: '600', marginTop: 1 },
+  wingmanHeaderButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceTint,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  wingmanHeaderButtonActive: { backgroundColor: colors.primaryStrong },
+  pressed: { opacity: 0.75 },
 
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: colors.muted, fontSize: 14, marginBottom: 10 },
@@ -287,6 +436,44 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 5,
   },
   bubbleTheirsText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+
+  wingmanPanel: {
+    backgroundColor: colors.surfaceWarm,
+    borderColor: colors.noteBorder,
+    borderTopWidth: 1,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  wingmanPanelHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  wingmanTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 7 },
+  wingmanTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  wingmanPrivate: { color: colors.primaryText, fontSize: 11.5, fontWeight: '700' },
+  wingmanBody: { color: colors.textSoft, flex: 1, fontSize: 12.5, lineHeight: 18 },
+  wingmanLoading: { alignItems: 'center', flexDirection: 'row', gap: 9 },
+  wingmanError: { gap: 7 },
+  wingmanSuggestionList: { gap: 7 },
+  wingmanSuggestion: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  wingmanSuggestionText: { color: colors.text, fontSize: 13, lineHeight: 18 },
+  wingmanRefresh: { alignSelf: 'flex-start', paddingVertical: 3 },
+  wingmanRefreshText: { color: colors.primaryText, fontSize: 12.5, fontWeight: '800' },
+  wingmanPrimaryButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryStrong,
+    borderRadius: radii.pill,
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+  },
+  wingmanPrimaryText: { color: colors.onPrimary, fontSize: 12.5, fontWeight: '800' },
+  wingmanFootnote: { color: colors.muted, fontSize: 10.5, lineHeight: 15 },
 
   inputBar: {
     flexDirection: 'row',

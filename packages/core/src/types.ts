@@ -135,6 +135,7 @@ export interface PreferenceProfile {
   summary: string;
   hardFilters: string[];
   softPreferences: string[];
+  softAvoidances: string[];
   feedbackSummary: string[];
   updatedAt: Date;
 }
@@ -160,11 +161,36 @@ export interface CuratedMatch {
   decidedAt?: Date;
 }
 
+/** A fully revealed recommendation. Only this shape may be acted on. */
+export interface RevealedDailyPick extends CuratedMatch {
+  kind: 'revealed';
+}
+
+/**
+ * Deliberately identity-free preview returned while a batch is locked. Keep
+ * this contract small: adding profile or internal match fields is a privacy
+ * boundary change, not a presentation change.
+ */
+export interface LockedDailyPick {
+  kind: 'locked';
+  previewId: string;
+  compatibilityLabel: string;
+  compatibilityScore: number;
+}
+
+export type DailyPick = RevealedDailyPick | LockedDailyPick;
+export type AiPickAccessMode = 'open' | 'stub';
+export type AiPickBatchAccessState = 'teaser' | 'locked' | 'unlocked';
+
 export interface DailyMatchBatch {
   id: string;
   userId: string;
   date: string;
-  matches: CuratedMatch[];
+  matches: DailyPick[];
+  mode: AiPickAccessMode;
+  state: AiPickBatchAccessState;
+  priceVnd: number;
+  lockedCount: number;
   createdAt: Date;
 }
 

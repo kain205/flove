@@ -84,7 +84,7 @@ function mutualPreference(row: JsonObject): number | undefined {
 function publicSnapshot(row: JsonObject) {
   return {
     id: String(row.id),
-    name: String(row.name ?? 'FPT Student'),
+    name: String(row.name ?? 'Thành viên F-Love'),
     age: finite(row.age),
     major: String(row.major ?? 'SE'),
     campus: String(row.campus ?? 'HCM'),
@@ -143,7 +143,7 @@ function publicProfileFromSnapshot(value: unknown) {
   const bio = String(snapshot.bio ?? '');
   return {
     id: String(snapshot.id ?? ''),
-    name: String(snapshot.name ?? 'FPT Student'),
+    name: String(snapshot.name ?? 'Thành viên F-Love'),
     age: finite(snapshot.age),
     major: String(snapshot.major ?? 'SE'),
     campus: String(snapshot.campus ?? 'HCM'),
@@ -160,9 +160,19 @@ function publicProfileFromSnapshot(value: unknown) {
   };
 }
 
-function curatedMatchFromRow(row: JsonObject) {
+function dailyPickFromRow(row: JsonObject) {
+  if (row.kind === 'locked') {
+    return {
+      kind: 'locked' as const,
+      previewId: String(row.preview_id ?? ''),
+      compatibilityLabel: String(row.compatibility_label ?? ''),
+      compatibilityScore: finite(row.compatibility_score),
+    };
+  }
+  if (row.kind !== 'revealed') return null;
   return {
-    id: String(row.id),
+    kind: 'revealed' as const,
+    id: String(row.match_id),
     batchId: String(row.batch_id),
     userId: String(row.user_id),
     candidateId: String(row.candidate_id),
@@ -172,7 +182,7 @@ function curatedMatchFromRow(row: JsonObject) {
     suggestedOpener: row.suggested_opener ? String(row.suggested_opener) : undefined,
     compatibilityLabel: String(row.compatibility_label ?? ''),
     compatibilityScore: finite(row.compatibility_score),
-    status: String(row.status ?? 'pending'),
+    status: String(row.match_status ?? 'pending'),
     feedbackTags: array(row.feedback_tags),
     feedbackNote: row.feedback_note ? String(row.feedback_note) : undefined,
     createdAt: String(row.created_at),
@@ -181,21 +191,31 @@ function curatedMatchFromRow(row: JsonObject) {
 }
 
 async function loadReadyBatch(admin: any, userId: string, batchId: string) {
-  const [batchResult, matchesResult] = await Promise.all([
-    admin.from('daily_match_batches').select('*').eq('id', batchId).eq('user_id', userId).single(),
-    admin.rpc('get_daily_match_rows_v2', { p_user_id: userId, p_batch_id: batchId }),
-  ]);
-  const { data: batch, error: batchError } = batchResult;
-  if (batchError) throw batchError;
-  const { data: matches, error: matchesError } = matchesResult;
-  if (matchesError) throw matchesError;
+  const { data, error } = await admin.rpc('get_daily_picks_safe', {
+    p_user_id: userId,
+    p_batch_id: batchId,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as JsonObject[];
+  const metadata = rows[0];
+  if (!metadata) throw new Error('daily_picks_metadata_missing');
+  const picks = rows.flatMap(row => {
+    const pick = dailyPickFromRow(row);
+    return pick ? [pick] : [];
+  });
 
   return {
-    id: String(batch.id),
-    userId: String(batch.user_id),
-    date: String(batch.date),
-    matches: (matches ?? []).map((row: JsonObject) => curatedMatchFromRow(row)),
-    createdAt: String(batch.created_at),
+    id: String(metadata.batch_id),
+    userId,
+    date: String(metadata.business_date),
+    matches: picks,
+    mode: metadata.product_mode === 'stub' ? 'stub' : 'open',
+    state: ['teaser', 'locked', 'unlocked'].includes(String(metadata.access_state))
+      ? String(metadata.access_state)
+      : 'unlocked',
+    priceVnd: finite(metadata.price_vnd),
+    lockedCount: finite(metadata.locked_count),
+    createdAt: String(metadata.created_at ?? `${String(metadata.business_date)}T00:00:00.000Z`),
   };
 }
 

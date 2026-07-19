@@ -1,4 +1,4 @@
-import { acceptCuratedMatch, ensureDailyMatches, submitMatchFeedback } from '@flove/supabase';
+import { acceptCuratedMatch, ensureDailyMatches, submitMatchFeedback, unlockDailyMatchBatch } from '@flove/supabase';
 import { supabase } from '@/lib/supabase';
 import type { MatchFeedbackDecision } from '@flove/core';
 
@@ -22,6 +22,14 @@ export function actOnPick(input: { matchId: string; decision: PickDecision; user
     decision: input.decision,
     idempotencyKey,
     expectedUserId: input.userId,
+  });
+}
+
+export function unlockTodayMatchBatch(batchId: string, userId: string) {
+  return unlockDailyMatchBatch(supabase, {
+    batchId,
+    expectedUserId: userId,
+    idempotencyKey: `${batchId}:simulated-unlock:v1`,
   });
 }
 

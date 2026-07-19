@@ -93,6 +93,7 @@ export function scoreCandidate(
     ...(self?.preferredVibes ?? []),
     ...(self?.datingGoals ?? []),
   ].join(' ').toLowerCase();
+  const avoidanceText = (preference?.softAvoidances ?? []).join(' ').toLowerCase();
 
   let score = 58;
   score += Math.min(sharedInterests.length * 10, 24);
@@ -100,12 +101,14 @@ export function scoreCandidate(
   if (self?.major && self.major === candidate.major) score += 6;
   candidate.personalityTags.forEach(tag => {
     if (preferenceText.includes(tag.toLowerCase())) score += 4;
+    if (avoidanceText.includes(tag.toLowerCase())) score -= 4;
   });
   candidate.datingGoals.forEach(goal => {
     if (self?.datingGoals.includes(goal)) score += 5;
   });
   candidate.interests.forEach(interest => {
     if (preferenceText.includes(interest.toLowerCase())) score += 4;
+    if (avoidanceText.includes(interest.toLowerCase())) score -= 4;
   });
 
   return Math.max(45, Math.min(score, 96));
