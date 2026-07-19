@@ -1171,7 +1171,7 @@ revoke all on function public.profile_hard_dealbreakers(public.profiles)
   from anon, authenticated, public;
 revoke all on function public.profile_height_hard_compatible(public.profiles, public.profiles)
   from anon, authenticated, public;
-revoke all on function public.vector_cosine_similarity(vector, vector)
+revoke all on function public.vector_cosine_similarity(public.vector, public.vector)
   from anon, authenticated, public;
 revoke all on function public.text_array_overlap_ratio(text[], text[])
   from anon, authenticated, public;
