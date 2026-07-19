@@ -62,12 +62,12 @@ export default function SignupScreen() {
       <BrandMark size={52} />
       <View style={styles.header}>
         <Text style={styles.title}>Tạo tài khoản</Text>
-        <Text style={styles.subtitle}>Tham gia cộng đồng F-Love bằng email FPT của bạn.</Text>
+        <Text style={styles.subtitle}>Tham gia cộng đồng F-Love bằng email của bạn.</Text>
       </View>
 
       <TextField
-        label="Email FPT"
-        placeholder="ten.sv@fpt.edu.vn"
+        label="Email"
+        placeholder="ban@email.com"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}

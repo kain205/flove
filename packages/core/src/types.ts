@@ -5,10 +5,10 @@ export type Campus = (typeof CAMPUSES)[number];
 export type Major = (typeof MAJORS)[number];
 
 export const CAMPUS_LABELS_VI: Record<Campus, string> = {
-  HCM: 'FPT University TP. Hồ Chí Minh',
-  Hanoi: 'FPT University Hà Nội',
-  Danang: 'FPT University Đà Nẵng',
-  Cantho: 'FPT University Cần Thơ',
+  HCM: 'TP. Hồ Chí Minh',
+  Hanoi: 'Hà Nội',
+  Danang: 'Đà Nẵng',
+  Cantho: 'Cần Thơ',
 };
 
 export const MAJOR_LABELS_VI: Record<Major, string> = {

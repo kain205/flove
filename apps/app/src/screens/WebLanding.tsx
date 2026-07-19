@@ -299,10 +299,10 @@ export function WebLanding() {
             <Eyebrow>An toàn & tin cậy</Eyebrow>
             <Text style={styles.h2Left}>Kết nối an toàn, thân thiện</Text>
             <Text style={styles.heroLead}>
-              Mọi tài khoản đều được xác thực qua email FPT. Bảo vệ thông tin, báo cáo và chặn dễ dàng.
+              Mọi tài khoản đều được xác thực qua email. Bảo vệ thông tin, báo cáo và chặn dễ dàng.
             </Text>
             <View style={styles.safetyList}>
-              <SafetyRow>Xác thực email sinh viên FPT</SafetyRow>
+              <SafetyRow>Xác thực email khi đăng ký</SafetyRow>
               <SafetyRow>Báo cáo & chặn người dùng nhanh</SafetyRow>
               <SafetyRow>Dữ liệu được bảo mật, kiểm duyệt</SafetyRow>
             </View>
@@ -310,7 +310,7 @@ export function WebLanding() {
           <LinearGradient colors={['#F9A93C', '#EC6C1A']} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={styles.safeCard}>
             <Text style={{ fontSize: 60, marginBottom: 16 }}>🛡️</Text>
             <Text style={styles.safeCardTitle}>100% xác thực</Text>
-            <Text style={styles.safeCardBody}>Chỉ sinh viên FPT đã xác minh mới có thể tham gia cộng đồng F-Love.</Text>
+            <Text style={styles.safeCardBody}>Tài khoản xác minh qua email giúp cộng đồng F-Love an toàn hơn.</Text>
           </LinearGradient>
         </View>
       </View>
@@ -341,7 +341,7 @@ export function WebLanding() {
             <NavLink>Hỗ trợ</NavLink>
             <NavLink>Liên hệ</NavLink>
           </View>
-          <Text style={styles.copyright}>© 2026 F-Love · FPT University</Text>
+          <Text style={styles.copyright}>© 2026 F-Love</Text>
         </View>
       </View>
     </ScrollView>

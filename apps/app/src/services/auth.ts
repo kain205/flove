@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
-import { assertFptEmail } from '@flove/core';
+import { assertValidSignupEmail } from '@flove/core';
 import { supabase } from '@/lib/supabase';
 import { passwordSignUpResult } from './passwordSignup';
 
@@ -16,14 +16,14 @@ function createAuthRedirect(path: string) {
 }
 
 export async function signInWithPassword(email: string, password: string) {
-  assertFptEmail(email);
+  assertValidSignupEmail(email);
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
 
 export async function signUpWithPassword(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  assertFptEmail(normalizedEmail);
+  assertValidSignupEmail(normalizedEmail);
   const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,
     password,
@@ -52,7 +52,7 @@ export async function signInWithGoogle() {
 }
 
 export async function sendPasswordReset(email: string) {
-  assertFptEmail(email);
+  assertValidSignupEmail(email);
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: createAuthRedirect('/auth/reset-password'),
   });

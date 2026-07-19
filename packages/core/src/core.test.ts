@@ -4,7 +4,7 @@ import {
   businessDateKey,
   extractOnboardingSignals,
   getProfileReadiness,
-  isFptEmail,
+  isValidSignupEmail,
   localDateKey,
   normalizeOnboardingDraft,
   overlayProfileOnOnboardingDraft,
@@ -58,9 +58,10 @@ const baseProfile: UserProfile = {
 };
 
 describe('@flove/core', () => {
-  it('validates FPT emails', () => {
-    expect(isFptEmail('student@fpt.edu.vn')).toBe(true);
-    expect(isFptEmail('student@gmail.com')).toBe(false);
+  it('validates signup emails from any provider', () => {
+    expect(isValidSignupEmail('student@fpt.edu.vn')).toBe(true);
+    expect(isValidSignupEmail('student@gmail.com')).toBe(true);
+    expect(isValidSignupEmail('not-an-email')).toBe(false);
   });
 
   it('builds stable pair keys', () => {

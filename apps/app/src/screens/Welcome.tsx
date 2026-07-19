@@ -34,7 +34,7 @@ export function Welcome() {
           </Animated.View>
           <Text style={styles.brand}>F-Love</Text>
           <Text style={styles.tagline}>CONNECT · SHARE · GROW</Text>
-          <Text style={styles.lead}>Ứng dụng hẹn hò ghép đôi bằng AI dành cho sinh viên FPT.</Text>
+          <Text style={styles.lead}>Ứng dụng hẹn hò ghép đôi bằng AI dành cho sinh viên.</Text>
         </View>
         <View style={styles.actions}>
           <Pressable onPress={goLogin} style={styles.primaryBtn}>

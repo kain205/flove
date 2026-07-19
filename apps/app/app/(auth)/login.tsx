@@ -35,8 +35,8 @@ export default function LoginScreen() {
       </View>
 
       <TextField
-        label="Email FPT"
-        placeholder="ten.sv@fpt.edu.vn"
+        label="Email"
+        placeholder="ban@email.com"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}

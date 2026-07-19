@@ -103,10 +103,10 @@ function publicSnapshot(row: JsonObject) {
 
 function campusLabel(campus: string) {
   const labels: Record<string, string> = {
-    HCM: 'FPT University TP. Hồ Chí Minh',
-    Hanoi: 'FPT University Hà Nội',
-    Danang: 'FPT University Đà Nẵng',
-    Cantho: 'FPT University Cần Thơ',
+    HCM: 'TP. Hồ Chí Minh',
+    Hanoi: 'Hà Nội',
+    Danang: 'Đà Nẵng',
+    Cantho: 'Cần Thơ',
   };
   return labels[campus] ?? campus;
 }

@@ -6,17 +6,23 @@ import {
   type OnboardingReviewEdits,
 } from './types';
 
-export const FPT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
+// F-Love accepts any student/personal email; only a plausible address is required.
+export const SIGNUP_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function isFptEmail(email: string): boolean {
-  return FPT_EMAIL_REGEX.test(email.trim());
+export function isValidSignupEmail(email: string): boolean {
+  return SIGNUP_EMAIL_REGEX.test(email.trim());
 }
 
-export function assertFptEmail(email: string): void {
-  if (!isFptEmail(email)) {
-    throw new Error('Chi chap nhan email FPT (@fpt.edu.vn)');
+export function assertValidSignupEmail(email: string): void {
+  if (!isValidSignupEmail(email)) {
+    throw new Error('Vui lòng nhập một địa chỉ email hợp lệ');
   }
 }
+
+/** @deprecated FPT-only signup was removed; kept as an alias for old imports. */
+export const isFptEmail = isValidSignupEmail;
+/** @deprecated FPT-only signup was removed; kept as an alias for old imports. */
+export const assertFptEmail = assertValidSignupEmail;
 
 const MAX_ANSWER_LENGTH = 4_000;
 const MAX_REVIEW_LENGTH = 1_000;

@@ -1,4 +1,4 @@
-import { expectedUserFenceResponse, isFptAccountEmail, jsonObjectBody } from './client.ts';
+import { expectedUserFenceResponse, isValidAccountEmail, jsonObjectBody } from './client.ts';
 
 function assert(condition: unknown, message = 'Assertion failed.'): asserts condition {
   if (!condition) throw new Error(message);
@@ -42,9 +42,9 @@ Deno.test('expected-user fence rejects missing revision ownership and account sw
 });
 
 Deno.test('FPT admission validates the verified account email exactly', () => {
-  assert(isFptAccountEmail('student@fpt.edu.vn'));
-  assert(isFptAccountEmail('Student.Name+app@fpt.edu.vn'));
-  assert(!isFptAccountEmail('student@gmail.com'));
-  assert(!isFptAccountEmail('student@fpt.edu.vn.attacker.test'));
-  assert(!isFptAccountEmail('student@sub.fpt.edu.vn'));
+  assert(isValidAccountEmail('student@fpt.edu.vn'));
+  assert(isValidAccountEmail('Student.Name+app@fpt.edu.vn'));
+  assert(isValidAccountEmail('student@gmail.com'));
+  assert(!isValidAccountEmail('not-an-email'));
+  assert(!isValidAccountEmail('missing@tld'));
 });

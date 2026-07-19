@@ -1,6 +1,6 @@
 # F-Love
 
-F-Love is an AI-curated dating app for FPT students. Instead of swipe-based discovery, users receive a short daily set of AI Picks with clear reasons. A chat opens only when both people accept the same recommendation.
+F-Love is an AI-curated dating app for students. Instead of swipe-based discovery, users receive a short daily set of AI Picks with clear reasons. A chat opens only when both people accept the same recommendation.
 
 ## Core Features
 

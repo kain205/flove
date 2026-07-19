@@ -9,6 +9,6 @@ test('unauthenticated visitor can open the login screen from the landing page', 
 
   await expect(page).toHaveURL(/\/login\/?$/);
   await expect(page.getByText('Chào mừng trở lại', { exact: true })).toBeVisible();
-  await expect(page.getByPlaceholder('ten.sv@fpt.edu.vn')).toBeVisible();
+  await expect(page.getByPlaceholder('ban@email.com')).toBeVisible();
   await expect(page.getByPlaceholder('••••••••')).toBeVisible();
 });

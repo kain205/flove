@@ -23,9 +23,9 @@ export function requestIdFor(req: Request): string {
 }
 
 /** Product admission is based on the verified Supabase user email, never OAuth `hd`. */
-export function isFptAccountEmail(value: unknown): boolean {
+export function isValidAccountEmail(value: unknown): boolean {
   return typeof value === 'string'
-    && /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/i.test(value.trim());
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 /** Fences user-intent payloads against an auth session changing in flight. */
@@ -163,15 +163,15 @@ export async function requireUser(req: Request, fixedRequestId?: string) {
       response: errorResponse(requestId, 'not_authenticated', 'Not authenticated', 401),
     };
   }
-  if (!isFptAccountEmail(data.user.email)) {
+  if (!isValidAccountEmail(data.user.email)) {
     return {
       client,
       user: null,
       requestId,
       response: errorResponse(
         requestId,
-        'fpt_account_required',
-        'F-Love chỉ dành cho tài khoản @fpt.edu.vn đã được xác thực.',
+        'verified_email_required',
+        'Tài khoản cần có địa chỉ email hợp lệ đã được xác thực.',
         403,
       ),
     };

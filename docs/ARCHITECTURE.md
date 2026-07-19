@@ -6,12 +6,14 @@ Do not duplicate architecture details across many docs. Keep `AGENT.md` and `CLA
 
 ## Project Purpose
 
-F-Love is an AI-assisted dating and matchmaking app for FPT students. The main product surface is `AI Picks`: each user receives a short curated batch of recommended profiles with compatibility signals and explanations. A curated recommendation is not an official match until both users accept the same pair.
+F-Love is an AI-assisted dating and matchmaking app for students. The main product surface is `AI Picks`: each user receives a short curated batch of recommended profiles with compatibility signals and explanations. A curated recommendation is not an official match until both users accept the same pair.
 
 Core flows currently represented in the repository:
 
-- Auth: Supabase email/password and Google OAuth through PKCE, restricted to exact `@fpt.edu.vn`
-  account emails by a Before User Created hook plus runtime defense-in-depth checks.
+- Auth: Supabase email/password and Google OAuth through PKCE. Signup is open to any provider;
+  a Before User Created hook plus runtime defense-in-depth checks only require a plausible verified
+  email (the former FPT-only gate was removed in `202607190001_open_signup.sql`; the hook/helper
+  names keep their historical `fpt` naming for compatibility).
 - Onboarding/profile: profile fields, structured interests/tags/goals/vibes, profile completeness, and avatar storage contract.
 - AI Picks: daily curated recommendations, feedback, accept/decline, and server-side mutual accept.
 - Preference chat: user preference messages and assistant replies through an Edge Function.
@@ -125,7 +127,7 @@ Important v2 objects and invariants:
   server-side. A trigger recomputes completeness; one-release legacy upsert columns are accepted but
   neutralized before revision/completeness triggers, so clients cannot control readiness, analysis,
   revisions, embeddings, or completeness. The same compatibility trigger binds email/owner/avatar to
-  the authenticated FPT account and rejects or normalizes oversized display/discovery fields.
+  the authenticated account and rejects or normalizes oversized display/discovery fields.
 - `onboarding_drafts`: owner-readable autosave state with compare-and-swap `draft_revision`. Direct
   client writes are revoked. `save_onboarding_draft`, first-writer-wins `save_onboarding_analysis`, and
   `confirm_onboarding_profile_atomic` enforce that a confirmation uses the exact analyzed revision.
@@ -174,7 +176,7 @@ Important v2 objects and invariants:
   message/report/block RLS paths. The `private` schema is not exposed by the Data API. Edge admission,
   profile/view policies and avatar-write policies repeat the exact-domain check; service-role migration,
   repair and backfill paths bypass this user admission gate.
-- Storage bucket `avatars`: FPT-owner writes/updates and public reads; object size is capped at 5 MiB and
+- Storage bucket `avatars`: owner writes/updates and public reads; object size is capped at 5 MiB and
   accepted MIME types are JPEG, PNG and WebP. Profile URLs must point to that user's bucket prefix.
 
 RLS is the real access-control boundary:

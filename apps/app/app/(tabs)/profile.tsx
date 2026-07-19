@@ -92,7 +92,7 @@ export default function ProfileScreen() {
               {displayName}
               {profile?.age ? `, ${profile.age}` : ''}
             </Text>
-            <Text style={styles.location}>📍 {location || 'FPT University'}</Text>
+            <Text style={styles.location}>📍 {location || 'Sinh viên'}</Text>
             {details ? <Text style={styles.location}>{details}</Text> : null}
           </View>
         </View>
