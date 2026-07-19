@@ -1123,8 +1123,8 @@ end;
 $$;
 
 create or replace function public.vector_cosine_similarity(
-  p_left vector(1536),
-  p_right vector(1536)
+  p_left extensions.vector(1536),
+  p_right extensions.vector(1536)
 )
 returns double precision
 language sql
@@ -3149,11 +3149,11 @@ security definer
 set search_path = public, extensions, pg_catalog
 as $$
 declare
-  v_self vector(1536);
-  v_need vector(1536);
-  v_preference vector(1536);
-  v_communication vector(1536);
-  v_lifestyle vector(1536);
+  v_self extensions.vector(1536);
+  v_need extensions.vector(1536);
+  v_preference extensions.vector(1536);
+  v_communication extensions.vector(1536);
+  v_lifestyle extensions.vector(1536);
 begin
   if nullif(trim(coalesce(p_error_code, '')), '') is not null then
     update public.profiles p
@@ -3171,11 +3171,11 @@ begin
   end if;
 
   begin
-    v_self := (p_vectors -> 'self')::text::vector(1536);
-    v_need := (p_vectors -> 'need')::text::vector(1536);
-    v_preference := (p_vectors -> 'preference')::text::vector(1536);
-    v_communication := (p_vectors -> 'communication')::text::vector(1536);
-    v_lifestyle := (p_vectors -> 'lifestyle')::text::vector(1536);
+    v_self := (p_vectors -> 'self')::text::extensions.vector(1536);
+    v_need := (p_vectors -> 'need')::text::extensions.vector(1536);
+    v_preference := (p_vectors -> 'preference')::text::extensions.vector(1536);
+    v_communication := (p_vectors -> 'communication')::text::extensions.vector(1536);
+    v_lifestyle := (p_vectors -> 'lifestyle')::text::extensions.vector(1536);
   exception when others then
     raise exception using errcode = '22023', message = 'Each embedding must contain exactly 1536 numeric dimensions';
   end;
