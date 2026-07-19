@@ -70,6 +70,45 @@ function FeatureCard({ icon, title, body }: { icon: string; title: string; body:
   );
 }
 
+function PricingCard({
+  icon,
+  title,
+  price,
+  lines,
+  featured = false,
+}: {
+  icon: string;
+  title: string;
+  price: string;
+  lines: string[];
+  featured?: boolean;
+}) {
+  const content = (
+    <>
+      <Text style={[styles.pricingIcon, featured && styles.pricingIconFeatured]}>{icon}</Text>
+      <Text style={[styles.pricingTitle, featured && styles.pricingTextFeatured]}>{title}</Text>
+      <Text style={[styles.pricingPrice, featured && styles.pricingTextFeatured]}>{price}</Text>
+      <View style={styles.pricingLines}>
+        {lines.map((line) => (
+          <Text key={line} style={[styles.pricingLine, featured && styles.pricingTextFeatured]}>
+            {line}
+          </Text>
+        ))}
+      </View>
+    </>
+  );
+
+  if (featured) {
+    return (
+      <LinearGradient colors={['#F25513', '#EC6C1A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.pricingCard, styles.pricingCardFeatured]}>
+        {content}
+      </LinearGradient>
+    );
+  }
+
+  return <View style={styles.pricingCard}>{content}</View>;
+}
+
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
     <View style={styles.step}>
@@ -215,6 +254,26 @@ export function WebLanding() {
           <FeatureCard icon="✨" title="AI Matching" body="Gợi ý người phù hợp dựa trên dữ liệu và thuật toán tiên tiến, kèm điểm tương hợp rõ ràng." />
           <FeatureCard icon="💬" title="AI Wingman" body="Hỗ trợ mở lời và giao tiếp thông minh, tự tin hơn trong mọi cuộc trò chuyện." />
           <FeatureCard icon="🎭" title="Blind Date" body="Trò chuyện ẩn danh trước, tiết lộ danh tính khi cả hai đã thực sự sẵn sàng." />
+        </View>
+      </View>
+
+      {/* PRICING */}
+      <View style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Eyebrow>Gói dịch vụ</Eyebrow>
+          <Text style={styles.h2}>Chọn gói phù hợp với cách bạn muốn được ghép đôi</Text>
+        </View>
+        <View style={styles.pricingGrid}>
+          <PricingCard icon="▰" title="Normal Pack" price="99.000đ" lines={['1 lần setup matching']} />
+          <PricingCard icon="◇" title="Premium Pack" price="299.000đ" lines={['3 setups', 'Wingman AI Consultation']} featured />
+          <PricingCard icon="❤" title="Love Coach Pack" price="699.000đ" lines={['5 setups', 'Premium features', 'Profile/Chat reviews per setup']} />
+        </View>
+        <View style={styles.revenueRow}>
+          <Text style={styles.revenueTitle}>Revenue{'\n'}Streams</Text>
+          <View style={styles.trialBox}>
+            <Text style={styles.trialText}>We are offering free trials, please fill in this form</Text>
+            <Text style={styles.trialLink}>https://forms.gle/XNUJBFMU8osCoxG7</Text>
+          </View>
         </View>
       </View>
 
@@ -461,6 +520,61 @@ const styles = StyleSheet.create({
   featureIcon: { width: 56, height: 56, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   featureTitle: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 9 },
   featureBody: { fontSize: 14.5, lineHeight: 23, color: '#7A6B5E' },
+
+  // PRICING
+  pricingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 24, alignItems: 'stretch' },
+  pricingCard: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 300,
+    minHeight: 250,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: '#211C18',
+    borderRadius: 24,
+    paddingVertical: 28,
+    paddingHorizontal: 28,
+    justifyContent: 'flex-start',
+  },
+  pricingCardFeatured: {
+    backgroundColor: colors.primaryStrong,
+  },
+  pricingIcon: { fontSize: 34, lineHeight: 40, color: colors.primaryStrong, marginBottom: 14 },
+  pricingIconFeatured: { color: colors.onPrimary },
+  pricingTitle: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 10 },
+  pricingPrice: { fontSize: 38, lineHeight: 44, fontWeight: '900', color: '#111111', marginBottom: 8 },
+  pricingLines: { gap: 5 },
+  pricingLine: { fontSize: 20, lineHeight: 28, fontWeight: '800', color: colors.text },
+  pricingTextFeatured: { color: colors.onPrimary },
+  revenueRow: {
+    marginTop: 44,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 28,
+    alignItems: 'center',
+  },
+  revenueTitle: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 260,
+    fontSize: 46,
+    lineHeight: 52,
+    fontWeight: '900',
+    color: '#111111',
+  },
+  trialBox: {
+    flexGrow: 2,
+    flexShrink: 1,
+    flexBasis: 420,
+    borderWidth: 2,
+    borderColor: '#211C18',
+    borderRadius: 22,
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    backgroundColor: colors.surface,
+  },
+  trialText: { fontSize: 20, lineHeight: 29, color: colors.text },
+  trialLink: { fontSize: 20, lineHeight: 29, fontWeight: '900', color: '#111111' },
 
   // HOW
   howCard: { borderRadius: 32, borderWidth: 1, borderColor: '#F9E6C8', paddingVertical: 56, paddingHorizontal: 48 },
