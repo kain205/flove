@@ -11,7 +11,10 @@ import {
   validateOnboardingDraft,
 } from '../_shared/analysis.ts';
 
-const ANALYZE_DEADLINE_MS = 12_000;
+// Wall-clock budget for the whole request. The provider call for the full strict-schema
+// analysis typically needs ~7s and openAIFetch splits its budget across maxAttempts, so
+// each attempt must still get comfortably more than that after auth/draft/rate-limit I/O.
+const ANALYZE_DEADLINE_MS = 25_000;
 const FALLBACK_PERSIST_BUDGET_MS = 1_500;
 
 function positiveRevision(value: unknown): number | null {

@@ -25,7 +25,7 @@
     "supabase:db:push": "supabase db push --linked",
     "supabase:db:dry-run": "supabase db push --linked --dry-run",
     "supabase:config:push": "supabase config push",
-    "supabase:functions:deploy": "supabase functions deploy --use-api ensure-daily-matches generate-daily-matches analyze-onboarding-profile confirm-onboarding-profile process-ai-jobs submit-match-feedback accept-curated-match send-preference-chat-message find-blind-date-partner request-reveal",
+    "supabase:functions:deploy": "supabase functions deploy --use-api --import-map supabase/functions/deno.json ensure-daily-matches generate-daily-matches analyze-onboarding-profile confirm-onboarding-profile process-ai-jobs submit-match-feedback accept-curated-match send-preference-chat-message find-blind-date-partner request-reveal",
     "supabase:functions:bundle": "deno bundle --frozen --config supabase/functions/deno.json --platform deno --outdir /tmp/flove-edge-bundles supabase/functions/*/index.ts",
     "supabase:functions:check": "deno check --config supabase/functions/deno.json supabase/functions/*/index.ts",
     "supabase:functions:test": "deno test --config supabase/functions/deno.json supabase/functions/_shared/*.test.ts",
