@@ -144,7 +144,14 @@ export function ChatWidget() {
               ) : summaries.isError ? (
                 <View style={styles.center}><Text style={styles.stateText}>Chưa tải được trò chuyện.</Text><Pressable onPress={() => void summaries.refetch()}><Text style={styles.retry}>Thử lại</Text></Pressable></View>
               ) : rows.length === 0 ? (
-                <View style={styles.center}><MessageCircle color={colors.primary} size={28} /><Text style={styles.stateTitle}>Chưa có cuộc trò chuyện</Text><Text style={styles.stateText}>Match chính thức sẽ xuất hiện ở đây.</Text></View>
+                <View style={styles.center}>
+                  <MessageCircle color={colors.primary} size={28} />
+                  <Text style={styles.stateTitle}>Thử chat mẫu trước nhé</Text>
+                  <Text style={styles.stateText}>Làm quen với composer và Wingman mà không nhắn cho người thật.</Text>
+                  <Pressable onPress={() => { setOpen(false); router.push('/chat-tutorial'); }} style={styles.tutorialButton}>
+                    <Text style={styles.tutorialButtonText}>Mở hướng dẫn chat</Text>
+                  </Pressable>
+                </View>
               ) : (
                 <ScrollView contentContainerStyle={styles.quickList} showsVerticalScrollIndicator={false}>
                   {rows.map(row => (
@@ -186,6 +193,8 @@ const styles = StyleSheet.create({
   stateTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
   stateText: { color: colors.muted, fontSize: 10.5, lineHeight: 15, textAlign: 'center' },
   retry: { color: colors.primaryText, fontSize: 10.5, fontWeight: '900' },
+  tutorialButton: { backgroundColor: colors.surfaceTint, borderRadius: 12, marginTop: 4, paddingHorizontal: 13, paddingVertical: 9 },
+  tutorialButtonText: { color: colors.primaryText, fontSize: 10.5, fontWeight: '900' },
   quickList: { gap: 2, padding: 10 },
   quickRow: { alignItems: 'center', borderRadius: 17, flexDirection: 'row', gap: 10, padding: 9 },
   quickRowPressed: { backgroundColor: colors.surfaceTint },

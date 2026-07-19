@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(24);
 
 select has_table('public', 'learning_courses', 'learning course catalog exists');
 select has_table('public', 'course_enrollments', 'private course enrollment table exists');
@@ -9,6 +9,7 @@ select has_function('public', 'enroll_free_learning_course', array['text', 'text
 select has_function('public', 'complete_learning_lesson', array['text', 'text', 'integer', 'text'], 'lesson completion RPC exists');
 select has_function('public', 'list_learning_courses', array[]::text[], 'published course catalog RPC exists');
 select has_function('public', 'list_conversation_summaries', array['text', 'integer'], 'participant-safe conversation summary RPC exists');
+select has_function('public', 'list_ai_pick_history', array['integer'], 'owner-only liked AI Picks history RPC exists');
 
 select ok(
   not has_table_privilege('authenticated', 'public.learning_courses', 'SELECT')
@@ -40,6 +41,19 @@ insert into public.profiles (
   ('93000000-0000-0000-0000-000000000001', 'course-chat-one@example.com', 'Lan', 21, 'SE', 'HCM', '{"bio":"Lan"}', 100, true, now(), '[]', 2),
   ('93000000-0000-0000-0000-000000000002', 'course-chat-two@example.com', 'Minh', 22, 'AI', 'HCM', '{"bio":"Minh"}', 100, true, now(), '[]', 2),
   ('93000000-0000-0000-0000-000000000003', 'course-chat-three@example.com', 'Ngoài cuộc', 23, 'Biz', 'Hanoi', '{"bio":"Other"}', 100, true, now(), '[]', 2);
+
+insert into public.daily_match_batches(id, user_id, date, target_count, status)
+values ('course-chat-liked-batch', '93000000-0000-0000-0000-000000000001', date '2026-07-19', 2, 'ready');
+insert into public.curated_matches(
+  id, batch_id, user_id, candidate_id, candidate_snapshot, pair_key,
+  ai_reason, compatibility_label, compatibility_score, status, decided_at
+) values
+  ('course-chat-liked', 'course-chat-liked-batch', '93000000-0000-0000-0000-000000000001', '93000000-0000-0000-0000-000000000002',
+   '{"id":"93000000-0000-0000-0000-000000000002","name":"Minh","age":22,"major":"AI","campus":"HCM","avatar_url":"","bio":"Minh","interests":[],"personality_tags":[],"dating_goals":[],"preferred_vibes":[],"profile_text":{"bio":"Minh"},"profile_completeness":100}',
+   '93000000-0000-0000-0000-000000000001_93000000-0000-0000-0000-000000000002', 'Lý do an toàn', 'Rất hợp gu', 84, 'accepted', now()),
+  ('course-chat-declined', 'course-chat-liked-batch', '93000000-0000-0000-0000-000000000001', '93000000-0000-0000-0000-000000000003',
+   '{"id":"93000000-0000-0000-0000-000000000003","name":"Ngoài cuộc"}',
+   '93000000-0000-0000-0000-000000000001_93000000-0000-0000-0000-000000000003', 'Không lưu', 'Khác nhịp', 55, 'declined', now());
 
 insert into public.conversations(id, is_anonymous, updated_at)
 values ('course-chat-conversation', false, now());
@@ -118,6 +132,21 @@ select ok(
     and pg_get_function_result('public.list_conversation_summaries(text,integer)'::regprocedure)
       not like '%user_id%',
   'conversation summary contract has no partner or participant UUID column'
+);
+select is(
+  (select count(*)::integer from public.list_ai_pick_history(30)),
+  1,
+  'liked history returns accepted or matched rows but not declined picks'
+);
+select is(
+  (select candidate_snapshot ->> 'name' from public.list_ai_pick_history(30)),
+  'Minh',
+  'liked history retains the safe profile snapshot the user originally saw'
+);
+select ok(
+  pg_get_function_result('public.list_ai_pick_history(integer)'::regprocedure) not like '%candidate_id%'
+    and pg_get_function_result('public.list_ai_pick_history(integer)'::regprocedure) not like '%pair_key%',
+  'liked history contract omits candidate UUID and pair key'
 );
 
 select set_config('request.jwt.claim.sub', '93000000-0000-0000-0000-000000000003', true);

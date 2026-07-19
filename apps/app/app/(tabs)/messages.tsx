@@ -76,16 +76,38 @@ export default function MessagesScreen() {
           <Text style={styles.stateText}>{query.error instanceof Error ? query.error.message : 'Vui lòng thử lại.'}</Text>
           <Pressable onPress={() => void query.refetch()} style={styles.retryButton}><Text style={styles.retryText}>Thử lại</Text></Pressable>
         </View>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && search ? (
         <View style={styles.emptyCard}>
           <View style={styles.emptyIcon}><MessageCircleHeart color={colors.primaryStrong} size={28} /></View>
-          <Text style={styles.emptyTitle}>{search ? 'Không tìm thấy cuộc trò chuyện' : 'Một lời chào đang chờ'}</Text>
-          <Text style={styles.emptyBody}>{search ? 'Thử một tên hoặc từ khóa khác nhé.' : 'Khi hai bạn cùng thích nhau, cuộc trò chuyện sẽ xuất hiện ở đây.'}</Text>
-          {!search ? <Pressable onPress={() => router.push('/ai-picks')}><Text style={styles.discover}>Khám phá AI Picks</Text></Pressable> : null}
+          <Text style={styles.emptyTitle}>Không tìm thấy cuộc trò chuyện</Text>
+          <Text style={styles.emptyBody}>Thử một tên hoặc từ khóa khác nhé.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.listHead}><Text style={styles.listLabel}>GẦN ĐÂY</Text><Text style={styles.listCount}>{rows.length} cuộc trò chuyện</Text></View>
+          <View style={styles.listHead}><Text style={styles.listLabel}>{rows.length ? 'GẦN ĐÂY' : 'LÀM QUEN VỚI CHAT'}</Text><Text style={styles.listCount}>{rows.length ? `${rows.length} cuộc trò chuyện` : 'Dữ liệu hướng dẫn'}</Text></View>
+          {rows.length === 0 ? (
+            <>
+              <Pressable
+                accessibilityLabel="Mở cuộc trò chuyện hướng dẫn"
+                onPress={() => router.push('/chat-tutorial')}
+                style={({ pressed }) => [styles.row, styles.rowUnread, pressed && styles.rowPressed]}
+              >
+                <View><Avatar name="Mai" size={56} /><View style={styles.tutorialDot}><Sparkles color={colors.onPrimary} size={10} /></View></View>
+                <View style={styles.rowBody}>
+                  <View style={styles.rowTop}>
+                    <View style={styles.tutorialName}><Text numberOfLines={1} style={[styles.name, styles.nameUnread]}>Mai</Text><Text style={styles.tutorialPill}>HƯỚNG DẪN</Text></View>
+                    <Text style={[styles.time, styles.timeUnread]}>Bây giờ</Text>
+                  </View>
+                  <View style={styles.previewRow}><Text numberOfLines={1} style={[styles.preview, styles.previewUnread]}>Chạm vào đây để thử chat và Wingman nhé 👋</Text><View style={styles.badge}><Text style={styles.badgeText}>1</Text></View></View>
+                </View>
+              </Pressable>
+              <View style={styles.tutorialNote}>
+                <Text style={styles.tutorialTitle}>Đây là cuộc trò chuyện mẫu</Text>
+                <Text style={styles.emptyBody}>Không có người thật phía bên kia và không nội dung nào được gửi lên server. Khi bạn có match, chat thật sẽ thay thế phần hướng dẫn này.</Text>
+                <Pressable onPress={() => router.push('/ai-picks')}><Text style={styles.discover}>Khám phá AI Picks</Text></Pressable>
+              </View>
+            </>
+          ) : null}
           {rows.map(row => (
             <Pressable
               accessibilityLabel={`Mở trò chuyện với ${row.partnerName}`}
@@ -148,6 +170,11 @@ const styles = StyleSheet.create({
   rowPressed: { backgroundColor: colors.surfaceTint },
   privateDot: { alignItems: 'center', backgroundColor: colors.text, borderColor: colors.background, borderRadius: 9, borderWidth: 2, bottom: -1, height: 18, justifyContent: 'center', position: 'absolute', right: -1, width: 18 },
   privateDotText: { color: colors.onPrimary, fontSize: 9, fontWeight: '900' },
+  tutorialDot: { alignItems: 'center', backgroundColor: colors.primaryStrong, borderColor: colors.background, borderRadius: 10, borderWidth: 2, bottom: -1, height: 20, justifyContent: 'center', position: 'absolute', right: -1, width: 20 },
+  tutorialName: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 7, minWidth: 0 },
+  tutorialPill: { backgroundColor: colors.surfaceTint, borderRadius: radii.pill, color: colors.primaryText, fontSize: 7.5, fontWeight: '900', letterSpacing: 0.6, paddingHorizontal: 7, paddingVertical: 4 },
+  tutorialNote: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 19, borderWidth: 1, gap: 6, marginHorizontal: 7, marginTop: 10, padding: 17 },
+  tutorialTitle: { color: colors.text, fontSize: 13.5, fontWeight: '900' },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   name: { color: colors.text, flex: 1, fontSize: 14.5, fontWeight: '700' },

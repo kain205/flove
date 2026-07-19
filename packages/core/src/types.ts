@@ -179,6 +179,19 @@ export interface LockedDailyPick {
 }
 
 export type DailyPick = RevealedDailyPick | LockedDailyPick;
+
+/** A safe snapshot of a profile the current user explicitly liked. */
+export interface AiPickHistoryItem {
+  matchId: string;
+  candidate: PublicProfile;
+  aiReason: string;
+  suggestedOpener?: string;
+  compatibilityLabel: string;
+  compatibilityScore: number;
+  status: 'accepted' | 'matched';
+  likedAt: Date;
+}
+
 export type AiPickAccessMode = 'open' | 'stub';
 export type AiPickBatchAccessState = 'teaser' | 'locked' | 'unlocked';
 

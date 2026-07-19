@@ -5,8 +5,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Bell, Coffee, Flag, Heart, LockKeyhole, MessageCircle, RotateCcw, Sparkles, X } from 'lucide-react-native';
 import { Chip } from '@/components/Chip';
+import { LikedPicksGallery, TodayPickStrip } from '@/components/AiPicksDashboard';
 import { useCountUp } from '@/lib/useCountUp';
-import { actOnPick, ensureTodayMatches, unlockTodayMatchBatch } from '@/services/matching';
+import { actOnPick, ensureTodayMatches, likedAiPicksQueryKey, loadLikedAiPicks, unlockTodayMatchBatch } from '@/services/matching';
 import { useAuth } from '@/providers/AuthProvider';
 import { colors, gradientForKey, gradients, radii } from '@/theme';
 import type { LockedDailyPick, RevealedDailyPick } from '@flove/core';
@@ -38,6 +39,8 @@ export default function AiPicksScreen() {
   const [decidedIds, setDecidedIds] = useState<Set<string>>(() => new Set());
   const [processingPolls, setProcessingPolls] = useState(0);
   const [unlockConfirmationOpen, setUnlockConfirmationOpen] = useState(false);
+  const [dashboardView, setDashboardView] = useState<'today' | 'liked'>('today');
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   const matchesQuery = useQuery({
     queryKey: ['ai-picks', userId],
@@ -60,8 +63,14 @@ export default function AiPicksScreen() {
       }
       if (input.decision === 'accepted') {
         void queryClient.invalidateQueries({ queryKey: ['conversations', userId] });
+        void queryClient.invalidateQueries({ queryKey: likedAiPicksQueryKey(userId) });
       }
     },
+  });
+  const historyQuery = useQuery({
+    queryKey: likedAiPicksQueryKey(userId),
+    queryFn: () => loadLikedAiPicks(userId),
+    enabled: Boolean(userId),
   });
   const unlockMutation = useMutation({
     mutationFn: ({ batchId }: { batchId: string }) => unlockTodayMatchBatch(batchId, userId),
@@ -74,6 +83,8 @@ export default function AiPicksScreen() {
     setDecidedIds(new Set());
     setProcessingPolls(0);
     setUnlockConfirmationOpen(false);
+    setDashboardView('today');
+    setSelectedMatchId(null);
   }, [userId]);
 
   useEffect(() => {
@@ -89,12 +100,39 @@ export default function AiPicksScreen() {
     void matchesQuery.refetch();
   };
 
-  if (matchesQuery.isLoading || !userId) {
+  if (!userId) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.loading}>
           <ActivityIndicator color={colors.primary} />
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  const likedCount = historyQuery.data?.length ?? 0;
+  const openCoach = () => router.push('/preference-chat');
+  if (dashboardView === 'liked') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <PicksHeader view={dashboardView} likedCount={likedCount} onChangeView={setDashboardView} onOpenCoach={openCoach} />
+        <ScrollView contentContainerStyle={styles.historyScroll} showsVerticalScrollIndicator={false}>
+          <LikedPicksGallery
+            items={historyQuery.data ?? []}
+            loading={historyQuery.isLoading}
+            error={historyQuery.isError ? (historyQuery.error instanceof Error ? historyQuery.error.message : 'Vui lòng thử lại.') : undefined}
+            onRetry={() => void historyQuery.refetch()}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (matchesQuery.isLoading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <PicksHeader view={dashboardView} likedCount={likedCount} onChangeView={setDashboardView} onOpenCoach={openCoach} />
+        <View style={styles.loading}><ActivityIndicator color={colors.primary} /></View>
       </SafeAreaView>
     );
   }
@@ -107,12 +145,15 @@ export default function AiPicksScreen() {
         body={matchesQuery.error instanceof Error ? matchesQuery.error.message : 'Đã có lỗi kết nối. Dữ liệu của bạn vẫn an toàn.'}
         actionLabel="Thử lại"
         onAction={retry}
+        likedCount={likedCount}
+        onOpenLiked={() => setDashboardView('liked')}
+        onOpenCoach={openCoach}
       />
     );
   }
 
   const result = matchesQuery.data;
-  if (!result) return <StatusScreen icon="⚠️" title="Chưa tải được gợi ý" body="Vui lòng thử lại." actionLabel="Thử lại" onAction={retry} />;
+  if (!result) return <StatusScreen icon="⚠️" title="Chưa tải được gợi ý" body="Vui lòng thử lại." actionLabel="Thử lại" onAction={retry} likedCount={likedCount} onOpenLiked={() => setDashboardView('liked')} onOpenCoach={openCoach} />;
   if (result.status === 'processing') {
     const paused = processingPolls >= MAX_PROCESSING_POLLS;
     return (
@@ -123,6 +164,9 @@ export default function AiPicksScreen() {
         body={paused ? 'Bạn có thể thử tải lại. Tiến trình trên server vẫn tiếp tục an toàn.' : 'Hệ thống đang chọn những hồ sơ phù hợp nhất cho bạn.'}
         actionLabel={paused ? 'Kiểm tra lại' : undefined}
         onAction={paused ? retry : undefined}
+        likedCount={likedCount}
+        onOpenLiked={() => setDashboardView('liked')}
+        onOpenCoach={openCoach}
       />
     );
   }
@@ -134,6 +178,9 @@ export default function AiPicksScreen() {
         body="AI Picks cần hồ sơ đã xác nhận và đủ thông tin để đưa ra gợi ý an toàn."
         actionLabel="Tiếp tục hồ sơ"
         onAction={() => router.replace('/onboarding')}
+        likedCount={likedCount}
+        onOpenLiked={() => setDashboardView('liked')}
+        onOpenCoach={openCoach}
       />
     );
   }
@@ -147,6 +194,9 @@ export default function AiPicksScreen() {
           : 'Hiện chưa có hồ sơ vượt qua các tiêu chí an toàn và sở thích hai chiều. Hãy quay lại sau nhé.'}
         actionLabel="Kiểm tra lại"
         onAction={retry}
+        likedCount={likedCount}
+        onOpenLiked={() => setDashboardView('liked')}
+        onOpenCoach={openCoach}
       />
     );
   }
@@ -162,7 +212,7 @@ export default function AiPicksScreen() {
   const showLockedPreviews = result.batch.mode === 'stub'
     && result.batch.lockedCount > 0
     && lockedMatches.length > 0;
-  const current = matches[0];
+  const current = matches.find(match => match.id === selectedMatchId) ?? matches[0];
   const remaining = matches.length + lockedMatches.length;
   const act = (decision: 'accepted' | 'declined' | 'skipped' | 'reported') => {
     if (!current || actionMutation.isPending) return;
@@ -180,28 +230,10 @@ export default function AiPicksScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>AI Picks</Text>
-          <Text style={styles.subtitle}>Gợi ý hôm nay · {remaining} người còn lại</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Mở F-Love AI Coach"
-            onPress={() => router.push('/preference-chat')}
-            style={styles.coachButton}
-          >
-            <Sparkles size={16} color={colors.primaryStrong} />
-            <Text style={styles.coachButtonText}>AI Coach</Text>
-          </Pressable>
-          <View style={styles.bell}>
-            <Bell size={19} color={colors.primaryText} />
-          </View>
-        </View>
-      </View>
+      <PicksHeader view={dashboardView} remaining={remaining} likedCount={likedCount} onChangeView={setDashboardView} onOpenCoach={openCoach} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <TodayPickStrip picks={matches} selectedId={current?.id} onSelect={setSelectedMatchId} />
         {current ? (
           <PickCard
             key={current.id}
@@ -293,6 +325,41 @@ function UnlockConfirmation({
   );
 }
 
+function PicksHeader({
+  view,
+  remaining,
+  likedCount,
+  onChangeView,
+  onOpenCoach,
+}: {
+  view: 'today' | 'liked';
+  remaining?: number;
+  likedCount: number;
+  onChangeView: (view: 'today' | 'liked') => void;
+  onOpenCoach: () => void;
+}) {
+  return (
+    <View style={styles.headerShell}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>AI Picks</Text>
+          <Text style={styles.subtitle}>{view === 'liked' ? 'Những hồ sơ bạn muốn xem lại' : `Gợi ý hôm nay${remaining == null ? '' : ` · ${remaining} người còn lại`}`}</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable accessibilityLabel="Mở F-Love AI Coach" accessibilityRole="button" onPress={onOpenCoach} style={styles.coachButton}>
+            <Sparkles size={16} color={colors.primaryStrong} /><Text style={styles.coachButtonText}>AI Coach</Text>
+          </Pressable>
+          <View style={styles.bell}><Bell size={19} color={colors.primaryText} /></View>
+        </View>
+      </View>
+      <View style={styles.tabs}>
+        <Pressable onPress={() => onChangeView('today')} style={[styles.tab, view === 'today' && styles.tabActive]}><Text style={[styles.tabText, view === 'today' && styles.tabTextActive]}>Hôm nay</Text></Pressable>
+        <Pressable onPress={() => onChangeView('liked')} style={[styles.tab, view === 'liked' && styles.tabActive]}><Heart color={view === 'liked' ? colors.onPrimary : colors.primaryText} fill={view === 'liked' ? colors.onPrimary : 'transparent'} size={13} /><Text style={[styles.tabText, view === 'liked' && styles.tabTextActive]}>Đã thích {likedCount > 0 ? `(${likedCount})` : ''}</Text></Pressable>
+      </View>
+    </View>
+  );
+}
+
 function StatusScreen({
   icon,
   title,
@@ -300,6 +367,9 @@ function StatusScreen({
   loading,
   actionLabel,
   onAction,
+  likedCount,
+  onOpenLiked,
+  onOpenCoach,
 }: {
   icon: string;
   title: string;
@@ -307,9 +377,13 @@ function StatusScreen({
   loading?: boolean;
   actionLabel?: string;
   onAction?: () => void;
+  likedCount: number;
+  onOpenLiked: () => void;
+  onOpenCoach: () => void;
 }) {
   return (
     <SafeAreaView style={styles.safe}>
+      <PicksHeader view="today" likedCount={likedCount} onChangeView={view => view === 'liked' && onOpenLiked()} onOpenCoach={onOpenCoach} />
       <View style={styles.statusPanel}>
         {loading ? <ActivityIndicator color={colors.primary} style={styles.statusSpinner} /> : <Text style={styles.statusIcon}>{icon}</Text>}
         <Text style={styles.emptyTitle}>{title}</Text>
@@ -560,13 +634,17 @@ const styles = StyleSheet.create({
   statusPanel: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34 },
   statusIcon: { fontSize: 48, marginBottom: 14 },
   statusSpinner: { marginBottom: 22 },
+  headerShell: { backgroundColor: colors.background, paddingBottom: 12 },
   header: {
+    alignSelf: 'center',
+    maxWidth: 980,
     paddingHorizontal: 22,
     paddingTop: 8,
     paddingBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    width: '100%',
   },
   title: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   subtitle: { fontSize: 12.5, color: colors.muted, marginTop: 2 },
@@ -582,7 +660,13 @@ const styles = StyleSheet.create({
   },
   coachButtonText: { color: colors.primaryStrong, fontSize: 12, fontWeight: '800' },
   bell: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.surfaceTint, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: 22, paddingBottom: 26, alignItems: 'center' },
+  tabs: { alignSelf: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 15, borderWidth: 1, flexDirection: 'row', gap: 4, maxWidth: 940, padding: 4, width: '92%' },
+  tab: { alignItems: 'center', borderRadius: 11, flex: 1, flexDirection: 'row', gap: 6, justifyContent: 'center', minHeight: 36, paddingHorizontal: 12 },
+  tabActive: { backgroundColor: colors.primaryStrong },
+  tabText: { color: colors.primaryText, fontSize: 11.5, fontWeight: '800' },
+  tabTextActive: { color: colors.onPrimary },
+  scroll: { alignItems: 'center', gap: 18, paddingBottom: 26, paddingHorizontal: 22 },
+  historyScroll: { paddingBottom: 120, paddingHorizontal: 22, paddingTop: 8 },
   pickShell: { width: '100%', maxWidth: 430 },
 
   card: {

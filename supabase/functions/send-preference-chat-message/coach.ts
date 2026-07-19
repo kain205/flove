@@ -145,6 +145,31 @@ export function preferenceCoachPromptInput(context: PreferenceCoachContext, curr
   };
 }
 
+/** Short social greetings do not need a paid provider round-trip or memory rewrite. */
+export function isPreferenceCoachGreeting(content: string): boolean {
+  const normalized = content
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('vi')
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  const tokens = normalized.split(' ');
+  const greetingTokens = new Set(['hi', 'hello', 'hey', 'chao', 'alo', 'coach', 'ban', 'oi']);
+  return tokens.length <= 4 && tokens.every(token => greetingTokens.has(token));
+}
+
+export function preferenceCoachGreetingPayload(context: PreferenceCoachContext): PreferenceCoachPayload {
+  return {
+    reply: 'Chào bạn 👋 Mình ở đây để giúp AI Picks hiểu gu của bạn rõ hơn. Bạn đang ưu tiên điều gì ở một người đồng hành?',
+    summary: context.preferenceSummary,
+    preferredTraits: context.preferredTraits,
+    avoidedTraits: context.avoidedTraits,
+    fallback: false,
+  };
+}
+
 /** Defensive normalization after strict schema parsing. Avoidance wins an overlap. */
 export function normalizePreferenceCoachPayload(value: unknown): PreferenceCoachPayload {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};

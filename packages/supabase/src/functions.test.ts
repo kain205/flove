@@ -10,6 +10,7 @@ import {
   learningCourseFromPayload,
   listConversationSummaries,
   listConversationMessages,
+  listAiPickHistory,
   listLearningCourses,
   markConversationRead,
   requestBlindDateReveal,
@@ -204,6 +205,40 @@ describe('dailyMatchesResultFromPayload', () => {
 
   it('rejects unknown response shapes', () => {
     expect(() => dailyMatchesResultFromPayload({ status: 'surprise' })).toThrow(/Unknown/);
+  });
+});
+
+describe('AI Picks history contract', () => {
+  it('maps only the safe liked snapshot and enforces the expected account', async () => {
+    let call: { name: string; input: unknown } | undefined;
+    const client = {
+      auth: { getUser: async () => ({ data: { user: { id: 'user-a' } }, error: null }) },
+      rpc: async (name: string, input: unknown) => {
+        call = { name, input };
+        return {
+          data: [{
+            match_id: 'match-a',
+            candidate_snapshot: {
+              id: 'candidate-a', name: 'An', age: 21, major: 'SE', campus: 'HCM', avatar_url: '', bio: 'Bio',
+              interests: ['cà phê'], personality_tags: [], dating_goals: [], preferred_vibes: [],
+              profile_text: { bio: 'Bio', school: 'FPT University' }, profile_completeness: 100,
+            },
+            ai_reason: 'Có cùng sở thích.', suggested_opener: null,
+            compatibility_label: 'Tiềm năng mạnh', compatibility_score: 82,
+            match_status: 'accepted', liked_at: '2026-07-19T00:00:00.000Z',
+          }],
+          error: null,
+        };
+      },
+    };
+    const result = await listAiPickHistory(client as never, 'user-a', 500);
+    expect(call).toEqual({ name: 'list_ai_pick_history', input: { p_limit: 100 } });
+    expect(result[0]).toMatchObject({
+      matchId: 'match-a', status: 'accepted', compatibilityScore: 82,
+      candidate: { id: 'candidate-a', name: 'An', avatarUrl: '', interests: ['cà phê'] },
+    });
+    expect(result[0]).not.toHaveProperty('candidateId');
+    await expect(listAiPickHistory(client as never, 'user-b')).rejects.toThrow(/Session changed/);
   });
 });
 

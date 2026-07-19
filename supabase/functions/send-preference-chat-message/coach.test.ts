@@ -1,12 +1,32 @@
 import {
   deterministicPreferencePayload,
   normalizePreferenceCoachPayload,
+  isPreferenceCoachGreeting,
+  preferenceCoachGreetingPayload,
   preferenceCoachAbandonParams,
   preferenceCoachContextFromRow,
   preferenceCoachPromptInput,
   preferenceCoachRequestFingerprint,
   unchangedMemoryFallback,
 } from './coach.ts';
+
+Deno.test('short Coach greetings return immediately without changing memory', () => {
+  const context = preferenceCoachContextFromRow({
+    user_age: 22,
+    llm_eligible: true,
+    preference_summary: 'Ưu tiên giao tiếp rõ ràng.',
+    soft_preferences: ['giao tiếp rõ ràng'],
+    soft_avoidances: ['kiểm soát'],
+    recent_turns: [],
+  });
+  assert(isPreferenceCoachGreeting('hi'), 'Expected a short hi greeting.');
+  assert(isPreferenceCoachGreeting('Chào Coach ơi!'), 'Expected a Vietnamese Coach greeting.');
+  assert(!isPreferenceCoachGreeting('hi, mình thích người hài hước'), 'A preference statement must still use the full flow.');
+  const payload = preferenceCoachGreetingPayload(context);
+  assert(payload.summary === context.preferenceSummary, 'Greeting changed the summary.');
+  assert(payload.preferredTraits[0] === 'giao tiếp rõ ràng', 'Greeting changed preferred memory.');
+  assert(payload.avoidedTraits[0] === 'kiểm soát', 'Greeting changed avoided memory.');
+});
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);

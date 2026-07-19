@@ -71,9 +71,15 @@ export default function PreferenceChatScreen() {
   const mutation = useMutation({
     mutationFn: sendPreferenceChat,
     retry: false,
+    onMutate: input => {
+      if (input.userId !== userId) return;
+      setFailedAttempt(null);
+      setContent('');
+    },
     onError: (error, input) => {
       if (input.userId !== userId) return;
       setFailedAttempt({ input, message: errorMessage(error) });
+      setContent(current => current.trim() ? current : input.content);
     },
     onSuccess: async (_result, input) => {
       if (input.userId === userId) {
@@ -123,16 +129,18 @@ export default function PreferenceChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboard}
       >
-        <View style={styles.header}>
-          <Pressable accessibilityLabel="Quay lại" hitSlop={10} onPress={() => router.back()} style={styles.backButton}>
-            <ChevronLeft color={colors.primaryText} size={25} />
-          </Pressable>
-          <View style={styles.headerCopy}>
-            <Text style={styles.title}>F-Love AI Coach</Text>
-            <Text style={styles.subtitle}>Hiểu gu của bạn để tinh chỉnh AI Picks.</Text>
-          </View>
-          <View style={styles.sparkle}>
-            <Sparkles color={colors.primaryText} size={19} />
+        <View style={styles.headerOuter}>
+          <View style={styles.header}>
+            <Pressable accessibilityLabel="Quay lại" hitSlop={10} onPress={() => router.back()} style={styles.backButton}>
+              <ChevronLeft color={colors.primaryText} size={25} />
+            </Pressable>
+            <View style={styles.headerCopy}>
+              <Text style={styles.title}>F-Love AI Coach</Text>
+              <Text style={styles.subtitle}>Hiểu gu của bạn để tinh chỉnh AI Picks.</Text>
+            </View>
+            <View style={styles.sparkle}>
+              <Sparkles color={colors.primaryText} size={19} />
+            </View>
           </View>
         </View>
 
@@ -155,96 +163,103 @@ export default function PreferenceChatScreen() {
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
             showsVerticalScrollIndicator={false}
           >
-            {isUnder18 ? (
-              <View accessibilityRole="summary" style={styles.ageNotice}>
-                <Text style={styles.ageNoticeTitle}>Chế độ bảo vệ người dùng dưới 18 tuổi</Text>
-                <Text style={styles.ageNoticeBody}>
-                  Coach vẫn lưu các ưu tiên bạn tự mô tả, nhưng không gửi nội dung cho mô hình AI.
-                </Text>
-              </View>
-            ) : null}
+            <View style={styles.conversationColumn}>
+              {isUnder18 ? (
+                <View accessibilityRole="summary" style={styles.ageNotice}>
+                  <Text style={styles.ageNoticeTitle}>Chế độ bảo vệ người dùng dưới 18 tuổi</Text>
+                  <Text style={styles.ageNoticeBody}>
+                    Coach vẫn lưu các ưu tiên bạn tự mô tả, nhưng không gửi nội dung cho mô hình AI.
+                  </Text>
+                </View>
+              ) : null}
 
-            {(messagesQuery.data ?? []).length === 0 ? (
-              <View style={styles.introCard}>
-                <Text style={styles.introIcon}>✨</Text>
-                <Text style={styles.introTitle}>Bạn muốn Coach hiểu thêm điều gì?</Text>
-                <Text style={styles.introBody}>
-                  Chia sẻ điều bạn ưu tiên, muốn tránh hoặc một thay đổi trong gu. Coach sẽ ghi nhớ để tinh chỉnh các lượt AI Picks sau.
-                </Text>
-              </View>
-            ) : null}
+              {(messagesQuery.data ?? []).length === 0 ? (
+                <View style={styles.introCard}>
+                  <Text style={styles.introIcon}>✨</Text>
+                  <Text style={styles.introTitle}>Bạn muốn Coach hiểu thêm điều gì?</Text>
+                  <Text style={styles.introBody}>
+                    Chia sẻ điều bạn ưu tiên, muốn tránh hoặc một thay đổi trong gu. Coach sẽ ghi nhớ để tinh chỉnh các lượt AI Picks sau.
+                  </Text>
+                </View>
+              ) : null}
 
-            {(messagesQuery.data ?? []).map(message => (
-              <View
-                key={message.id}
-                style={[
-                  styles.message,
-                  message.sender === 'user' ? styles.userMessage : styles.assistantMessage,
-                ]}
-              >
-                {message.sender === 'assistant' ? <Text style={styles.messageLabel}>F-Love AI Coach</Text> : null}
-                <Text style={message.sender === 'user' ? styles.userMessageText : styles.assistantMessageText}>
-                  {message.content}
-                </Text>
-              </View>
-            ))}
-
-            {failedAttempt ? (
-              <View accessibilityRole="alert" style={styles.errorCard}>
-                <Text style={styles.errorTitle}>Chưa lưu được thay đổi</Text>
-                <Text numberOfLines={2} style={styles.failedContent}>“{failedAttempt.input.content}”</Text>
-                <Text style={styles.errorBody}>{failedAttempt.message}</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={mutation.isPending}
-                  onPress={retryFailed}
-                  style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+              {(messagesQuery.data ?? []).map(message => (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.message,
+                    message.sender === 'user' ? styles.userMessage : styles.assistantMessage,
+                  ]}
                 >
-                  <Text style={styles.retryText}>{mutation.isPending ? 'Đang thử lại…' : 'Thử gửi lại'}</Text>
-                </Pressable>
-              </View>
-            ) : null}
+                  {message.sender === 'assistant' ? <Text style={styles.messageLabel}>F-Love AI Coach</Text> : null}
+                  <Text style={message.sender === 'user' ? styles.userMessageText : styles.assistantMessageText}>
+                    {message.content}
+                  </Text>
+                </View>
+              ))}
+
+              {mutation.isPending && mutation.variables?.userId === userId ? (
+                <>
+                  <View style={[styles.message, styles.userMessage, styles.pendingMessage]}>
+                    <Text style={styles.userMessageText}>{mutation.variables.content}</Text>
+                    <Text style={styles.pendingStatus}>Đang gửi…</Text>
+                  </View>
+                  <View accessibilityLabel="Coach đang trả lời" style={[styles.message, styles.assistantMessage, styles.typingMessage]}>
+                    <ActivityIndicator color={colors.primary} size="small" />
+                    <Text style={styles.typingText}>Coach đang suy nghĩ…</Text>
+                  </View>
+                </>
+              ) : null}
+
+              {failedAttempt ? (
+                <View accessibilityRole="alert" style={styles.errorCard}>
+                  <Text style={styles.errorTitle}>Chưa lưu được thay đổi</Text>
+                  <Text numberOfLines={2} style={styles.failedContent}>“{failedAttempt.input.content}”</Text>
+                  <Text style={styles.errorBody}>{failedAttempt.message}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={mutation.isPending}
+                    onPress={retryFailed}
+                    style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.retryText}>{mutation.isPending ? 'Đang thử lại…' : 'Thử gửi lại'}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
           </ScrollView>
         )}
 
-        <View style={styles.composer}>
-          <TextInput
-            accessibilityLabel="Lời nhắn cho F-Love AI Coach"
-            editable={Boolean(userId)}
-            maxLength={MAX_CONTENT_LENGTH}
-            multiline
-            onChangeText={setContent}
-            onSubmitEditing={submit}
-            placeholder="Ví dụ: Mình ưu tiên người giao tiếp rõ ràng…"
-            placeholderTextColor={colors.mutedLight}
-            style={styles.input}
-            textAlignVertical="top"
-            value={content}
-          />
-          <View style={styles.composerFooter}>
-            <View style={styles.validationCopy}>
-              {isBlank ? <Text style={styles.validationError}>Nội dung không thể chỉ có khoảng trắng.</Text> : null}
-              <Text style={[styles.count, content.length >= 1_800 && styles.countWarning]}>
-                {content.length}/{MAX_CONTENT_LENGTH}
-              </Text>
+        <View style={styles.composerOuter}>
+          <View style={styles.composer}>
+            <TextInput
+              accessibilityLabel="Lời nhắn cho F-Love AI Coach"
+              editable={Boolean(userId)}
+              maxLength={MAX_CONTENT_LENGTH}
+              multiline
+              onChangeText={setContent}
+              onSubmitEditing={submit}
+              placeholder="Ví dụ: Mình ưu tiên người giao tiếp rõ ràng…"
+              placeholderTextColor={colors.mutedLight}
+              style={styles.input}
+              textAlignVertical="top"
+              value={content}
+            />
+            <View style={styles.composerFooter}>
+              <View style={styles.validationCopy}>
+                {isBlank ? <Text style={styles.validationError}>Nội dung không thể chỉ có khoảng trắng.</Text> : null}
+                <Text style={[styles.count, content.length >= 1_800 && styles.countWarning]}>{content.length}/{MAX_CONTENT_LENGTH}</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Gửi cho F-Love AI Coach"
+                accessibilityRole="button"
+                disabled={!canSend}
+                onPress={submit}
+                style={({ pressed }) => [styles.sendButton, !canSend && styles.sendDisabled, pressed && canSend && styles.pressed]}
+              >
+                {mutation.isPending ? <ActivityIndicator color={colors.onPrimary} size="small" /> : <Send color={colors.onPrimary} size={18} />}
+              </Pressable>
             </View>
-            <Pressable
-              accessibilityLabel="Gửi cho F-Love AI Coach"
-              accessibilityRole="button"
-              disabled={!canSend}
-              onPress={submit}
-              style={({ pressed }) => [
-                styles.sendButton,
-                !canSend && styles.sendDisabled,
-                pressed && canSend && styles.pressed,
-              ]}
-            >
-              {mutation.isPending ? (
-                <ActivityIndicator color={colors.onPrimary} size="small" />
-              ) : (
-                <Send color={colors.onPrimary} size={18} />
-              )}
-            </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -255,15 +270,20 @@ export default function PreferenceChatScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   keyboard: { flex: 1 },
-  header: {
-    alignItems: 'center',
+  headerOuter: {
     backgroundColor: colors.surface,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
+  },
+  header: {
+    alignItems: 'center',
+    alignSelf: 'center',
     flexDirection: 'row',
     gap: 12,
+    maxWidth: 820,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    width: '100%',
   },
   backButton: { alignItems: 'center', height: 40, justifyContent: 'center', width: 40 },
   headerCopy: { flex: 1 },
@@ -281,7 +301,8 @@ const styles = StyleSheet.create({
   stateTitle: { color: colors.text, fontSize: 17, fontWeight: '800', textAlign: 'center' },
   stateBody: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   thread: { flex: 1 },
-  threadContent: { flexGrow: 1, gap: 10, justifyContent: 'flex-end', padding: 18 },
+  threadContent: { alignItems: 'center', flexGrow: 1, justifyContent: 'flex-end', padding: 18 },
+  conversationColumn: { gap: 10, maxWidth: 780, width: '100%' },
   ageNotice: {
     backgroundColor: colors.surfaceTint,
     borderColor: colors.border,
@@ -323,6 +344,10 @@ const styles = StyleSheet.create({
   messageLabel: { color: colors.primaryText, fontSize: 10.5, fontWeight: '800', marginBottom: 4 },
   userMessageText: { color: colors.onPrimary, fontSize: 14, lineHeight: 20 },
   assistantMessageText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  pendingMessage: { opacity: 0.82 },
+  pendingStatus: { color: 'rgba(255,255,255,0.76)', fontSize: 9, marginTop: 4, textAlign: 'right' },
+  typingMessage: { alignItems: 'center', flexDirection: 'row', gap: 8, minWidth: 175 },
+  typingText: { color: colors.muted, fontSize: 12 },
   errorCard: {
     alignSelf: 'stretch',
     backgroundColor: colors.surfaceWarm,
@@ -339,14 +364,19 @@ const styles = StyleSheet.create({
   retryButton: { alignSelf: 'flex-start', marginTop: 3, paddingVertical: 5 },
   retryText: { color: colors.primaryText, fontSize: 13, fontWeight: '800' },
   pressed: { opacity: 0.78 },
-  composer: {
+  composerOuter: {
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 12,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+  },
+  composer: {
+    alignSelf: 'center',
     gap: 8,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 14,
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    maxWidth: 780,
+    width: '100%',
   },
   input: {
     backgroundColor: colors.background,
@@ -357,7 +387,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     maxHeight: 132,
-    minHeight: 76,
+    minHeight: 54,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },

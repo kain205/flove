@@ -134,6 +134,9 @@ repairs, canonical Coach memory, and private Wingman context/cache contracts.
 course enrollment/progress RPCs, and identity-minimized conversation summary DTO used by inbox and widget.
 `202607190004_production_function_lint_fixes.sql` makes enum assignment explicit and removes output-column
 ambiguity from the batch unlock and lesson-completion upserts found by production schema lint.
+`202607190005_ai_pick_history.sql` adds the owner-only liked-pick history and its partial index;
+`202607190006_ai_pick_history_snapshot_allowlist.sql` rebuilds every returned historical snapshot from an
+explicit public-field allowlist so legacy JSON keys cannot cross the authenticated DTO.
 
 Important v2 objects and invariants:
 
@@ -171,6 +174,9 @@ Important v2 objects and invariants:
 - `match_pair_live_eligible` and `get_daily_match_rows_v2`: pending cached rows are rechecked against
   current readiness, moderation, block/report, consent, and official-match state before either display or
   acceptance. Unsafe pending rows are repaired out of the batch; already-decided history is retained.
+- `list_ai_pick_history` exposes only the caller's `accepted | matched` recommendations after a fresh
+  block/report/readiness/safety check. It returns the original public display snapshot with a match-scoped
+  render key, not the candidate UUID or pair key; declined/skipped/reported rows are never returned.
 - `candidate_pool_state`: monotonic eligibility revision used to wake empty batches when the pool changes.
 - `ai_jobs`: logged PGMQ queue accessed through service-only enqueue/read/delete/archive wrappers.
   `ai_job_registry` supplies idempotency. Profile embedding and match-enrichment completion RPCs fence
@@ -272,7 +278,8 @@ in `packages/core/src/matching-engine.ts` is imported by both Node/browser and D
   canonical preference memory and latest 12 preference turns; strict structured output replaces the
   full canonical memory. Provider failure/refusal/rate-limit stores a Vietnamese fallback turn while
   leaving memory unchanged. Profiles under 18 use deterministic soft-preference saving and never call
-  the provider.
+  the provider. Greeting-only turns such as `hi` are finalized deterministically without a provider call;
+  normal provider calls have a six-second deadline and a smaller bounded response budget.
 - `ask-conversation-wingman`: participant-only private coaching for revealed, non-anonymous conversations
   and users aged 18+. It sends at most 12 of the latest 20 caller-relative messages after contact-detail
   redaction, plus allowlisted caller context, and returns exactly three unique suggestions. Suggestions
@@ -312,15 +319,21 @@ Expo Router routes:
 - `app/auth/reset-password.tsx`: password reset route.
 - `app/(tabs)/ai-picks.tsx`: typed loading/processing/empty/error/ready AI Picks states, a strict
   `revealed | locked` DTO boundary, truthful overall score/label display, idempotent decisions, and
-  test-only simulated whole-batch unlock UI. It never fabricates component subscores or verification.
+  test-only simulated whole-batch unlock UI. Its dashboard exposes all revealed profiles in the current
+  batch and a separate safe gallery for previously liked profiles. It never fabricates component subscores
+  or verification.
 - `app/(tabs)/course.tsx`: free-course discovery, truthful enrollment state, and progress overview.
 - `app/(tabs)/blind-date.tsx`: compatibility redirect to the course tab; it no longer creates queue entries.
 - `app/course/[slug].tsx`: native lesson reader, quiz, private reflection, completion progress, and source links.
 - `app/(tabs)/messages.tsx`: participant-safe conversation list with real counterpart display data, last
-  message, timestamps, unread badges, search, and truthful loading/error/empty states.
+  message, timestamps, unread badges, and search. Accounts with no real conversations see an explicitly
+  labelled local tutorial row, never a fabricated production conversation.
 - `app/(tabs)/profile.tsx`: profile save/sign out shell.
 - `app/preference-chat.tsx`: Profile- and AI-Picks-reachable F-Love AI Coach with owner-scoped history,
-  bounded input, under-18 disclosure, explicit retry UI, and stable idempotency keys.
+  bounded input, under-18 disclosure, optimistic pending/typing state, responsive centered web layout,
+  explicit retry UI, and stable idempotency keys.
+- `app/chat-tutorial.tsx`: local-only interactive sample chat with a visible tutorial disclosure, three
+  Wingman examples and a composer simulation. It never reads or writes Supabase messages.
 - `app/onboarding/index.tsx`: multi-step onboarding/profile interview (`src/screens/onboarding/OnboardingScreen.tsx`), guarded by an authenticated session.
 - `app/chat/[conversationId].tsx`: message list through the relative-ownership RPC, idempotent send,
   atomic focus-time read acknowledgement, real counterpart header, timestamps/read state, reload-safe
@@ -531,7 +544,7 @@ Completed backend reliability v2 in the repository:
   as additive database/Edge contracts. Production remains in open mode.
 - The Blind Date tab is replaced by the free native relationship micro-course. Historical Blind Date
   sessions remain compatible, while Messages, full chat, and the compact widget share the same safe DTOs.
-- Production migrations through `202607190004`, Auth/API/DB/Storage config, and all 11 Edge Functions were
+- Production migrations through `202607190006`, Auth/API/DB/Storage config, and all 11 Edge Functions were
   deployed on 2026-07-19. Generated client types come from that linked production schema, which passes
   Supabase schema lint with no warnings or errors. Vector Storage buckets stay explicitly disabled because
   the app uses PostgreSQL `pgvector`, not the paid Storage vector-bucket product.

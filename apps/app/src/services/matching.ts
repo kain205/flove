@@ -1,9 +1,15 @@
-import { acceptCuratedMatch, ensureDailyMatches, submitMatchFeedback, unlockDailyMatchBatch } from '@flove/supabase';
+import { acceptCuratedMatch, ensureDailyMatches, listAiPickHistory, submitMatchFeedback, unlockDailyMatchBatch } from '@flove/supabase';
 import { supabase } from '@/lib/supabase';
 import type { MatchFeedbackDecision } from '@flove/core';
 
 export function ensureTodayMatches(userId: string) {
   return ensureDailyMatches(supabase, userId);
+}
+
+export const likedAiPicksQueryKey = (userId?: string) => ['ai-pick-history', userId ?? 'signed-out'] as const;
+
+export function loadLikedAiPicks(userId: string) {
+  return listAiPickHistory(supabase, userId, 50);
 }
 
 export type PickDecision = Extract<MatchFeedbackDecision, 'accepted' | 'declined' | 'skipped' | 'reported'>;

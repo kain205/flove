@@ -1,6 +1,7 @@
 import {
   isApiFailure,
   type AIProfileAnalysis,
+  type AiPickHistoryItem,
   type ApiFailure,
   type AiPickAccessMode,
   type AiPickBatchAccessState,
@@ -302,6 +303,72 @@ export interface UnlockDailyMatchBatchResult {
   priceVnd: number;
   applied: boolean;
   unlockSource: 'open' | 'trial' | 'simulated';
+}
+
+function aiPickHistoryItemFromRow(value: unknown): AiPickHistoryItem {
+  const row = record(value, 'Invalid AI Picks history row.');
+  const snapshot = record(row.candidate_snapshot, 'Invalid AI Picks history profile.');
+  const rawProfileText = snapshot.profile_text == null
+    ? {}
+    : record(snapshot.profile_text, 'Invalid AI Picks history profile text.');
+  const bio = textField(snapshot.bio ?? '', 'Invalid AI Picks history bio.');
+  const profileText: AiPickHistoryItem['candidate']['profileText'] = { bio };
+  for (const key of ['school', 'majorLabel', 'weekendStyle', 'conversationStyle', 'memorableThing', 'relationshipIntent'] as const) {
+    if (rawProfileText[key] != null) profileText[key] = textField(rawProfileText[key], `Invalid history profile text field: ${key}.`);
+  }
+  const status = String(row.match_status);
+  if (status !== 'accepted' && status !== 'matched') throw new Error('Invalid AI Picks history status.');
+  const gender = snapshot.gender == null
+    ? undefined
+    : ['male', 'female', 'other', 'prefer_not_to_show'].includes(String(snapshot.gender))
+      ? snapshot.gender as AiPickHistoryItem['candidate']['gender']
+      : undefined;
+  const heightCm = snapshot.height_cm == null
+    ? snapshot.height_cm as null | undefined
+    : finiteNumber(snapshot.height_cm, 'Invalid AI Picks history height.');
+  return {
+    matchId: stringField(row.match_id, 'Invalid AI Picks history id.'),
+    candidate: {
+      id: stringField(snapshot.id, 'Invalid AI Picks history candidate id.'),
+      name: stringField(snapshot.name, 'Invalid AI Picks history name.'),
+      age: finiteNumber(snapshot.age, 'Invalid AI Picks history age.'),
+      major: stringField(snapshot.major, 'Invalid AI Picks history major.') as AiPickHistoryItem['candidate']['major'],
+      campus: stringField(snapshot.campus, 'Invalid AI Picks history campus.') as AiPickHistoryItem['candidate']['campus'],
+      avatarUrl: textField(snapshot.avatar_url ?? '', 'Invalid AI Picks history avatar.'),
+      bio,
+      interests: stringArray(snapshot.interests ?? [], 'Invalid AI Picks history interests.'),
+      personalityTags: stringArray(snapshot.personality_tags ?? [], 'Invalid AI Picks history personality tags.'),
+      datingGoals: stringArray(snapshot.dating_goals ?? [], 'Invalid AI Picks history dating goals.'),
+      preferredVibes: stringArray(snapshot.preferred_vibes ?? [], 'Invalid AI Picks history vibes.'),
+      profileText,
+      profileCompleteness: finiteNumber(snapshot.profile_completeness ?? 0, 'Invalid AI Picks history completeness.'),
+      ...(gender ? { gender } : {}),
+      ...(heightCm !== undefined ? { heightCm } : {}),
+    },
+    aiReason: textField(row.ai_reason ?? '', 'Invalid AI Picks history reason.'),
+    ...(row.suggested_opener == null ? {} : { suggestedOpener: textField(row.suggested_opener, 'Invalid AI Picks history opener.') }),
+    compatibilityLabel: stringField(row.compatibility_label, 'Invalid AI Picks history label.'),
+    compatibilityScore: scoreField(row.compatibility_score),
+    status,
+    likedAt: dateField(row.liked_at, 'Invalid AI Picks history timestamp.'),
+  };
+}
+
+/** Returns only safe snapshots the authenticated user previously liked. */
+export async function listAiPickHistory(
+  client: FloveSupabaseClient,
+  expectedUserId: string,
+  limit = 30,
+): Promise<AiPickHistoryItem[]> {
+  const { data: auth, error: authError } = await client.auth.getUser();
+  if (authError || !auth.user) throw new Error('Not authenticated');
+  if (auth.user.id !== expectedUserId) throw new Error('Session changed while loading liked AI Picks.');
+  const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
+  const { data, error } = await client.rpc('list_ai_pick_history' as never, {
+    p_limit: boundedLimit,
+  } as never);
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map(aiPickHistoryItemFromRow);
 }
 
 /** Opens an entire AI Picks batch. The current backend records only simulated unlocks. */

@@ -14,6 +14,7 @@ export default function RootLayout() {
         <Stack.Screen name="chat/[conversationId]" />
         <Stack.Screen name="course/[slug]" />
         <Stack.Screen name="preference-chat" />
+        <Stack.Screen name="chat-tutorial" />
       </Stack>
     </AppProviders>
   );

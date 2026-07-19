@@ -6,9 +6,9 @@ F-Love is an AI-curated dating app for students. Instead of swipe-based discover
 
 | Feature | Description |
 | --- | --- |
-| AI Picks | Up to five curated recommendations with one overall compatibility index, its backend label, and data-backed reasons |
-| F-Love AI Coach | Private Vietnamese preference coaching that maintains preferred and avoided soft traits |
-| Messages + Wingman | Direct chat after mutual accept, with three private draft suggestions that never auto-send |
+| AI Picks | Dashboard of current recommendations plus a safe, reviewable gallery of profiles the user liked |
+| F-Love AI Coach | Responsive Vietnamese preference coaching with instant greeting handling and canonical soft-trait memory |
+| Messages + Wingman | Direct chat after mutual accept, three private draft suggestions, and a clearly labelled local tutorial for new users |
 | Yêu lành mạnh 101 | Free native micro-course on relationship signals, boundaries, communication, and online safety |
 | Chat widget | Authenticated quick inbox and composer synchronized with the full Messages experience |
 | Profile | Verified-email student profile, bio, campus, major, interests, and avatar |

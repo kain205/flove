@@ -17,14 +17,16 @@ import {
   preferenceCoachAbandonParams,
   preferenceCoachContextFromRow,
   preferenceCoachPromptInput,
+  preferenceCoachGreetingPayload,
   preferenceCoachRequestFingerprint,
+  isPreferenceCoachGreeting,
   type PreferenceCoachContext,
   type PreferenceCoachPayload,
   unchangedMemoryFallback,
 } from './coach.ts';
 
 const MAX_CONTENT_LENGTH = 2_000;
-const COACH_PROVIDER_DEADLINE_MS = 10_000;
+const COACH_PROVIDER_DEADLINE_MS = 6_000;
 
 function firstRow(value: unknown): Record<string, unknown> {
   const row = Array.isArray(value) ? value[0] : value;
@@ -122,6 +124,9 @@ async function handlePreferenceCoach(req: Request, requestId: string): Promise<R
   if (providerAlreadyStarted) {
     // A prior worker crossed the durable provider boundary but did not finish
     // the atomic save. Retry finalizes a fallback without calling OpenAI again.
+  } else if (context && isPreferenceCoachGreeting(content)) {
+    payload = preferenceCoachGreetingPayload(context);
+    source = 'deterministic-greeting';
   } else if (context && !context.llmEligible) {
     payload = deterministicPreferencePayload(context, content);
     updateMemory = true;
@@ -173,7 +178,7 @@ async function handlePreferenceCoach(req: Request, requestId: string): Promise<R
                 schema: PREFERENCE_COACH_SCHEMA,
                 deadlineMs: COACH_PROVIDER_DEADLINE_MS,
                 maxAttempts: 1,
-                maxOutputTokens: 1_500,
+                maxOutputTokens: 700,
               });
               payload = normalizePreferenceCoachPayload(raw);
               updateMemory = true;

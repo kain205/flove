@@ -2052,6 +2052,19 @@ export type Database = {
       }
       jsonb_array_or_empty: { Args: { p_value: Json }; Returns: Json }
       jsonb_object_or_empty: { Args: { p_value: Json }; Returns: Json }
+      list_ai_pick_history: {
+        Args: { p_limit?: number }
+        Returns: {
+          ai_reason: string
+          candidate_snapshot: Json
+          compatibility_label: string
+          compatibility_score: number
+          liked_at: string
+          match_id: string
+          match_status: Database["public"]["Enums"]["curated_match_status"]
+          suggested_opener: string
+        }[]
+      }
       list_conversation_messages: {
         Args: { p_conversation_id: string; p_limit?: number }
         Returns: {
