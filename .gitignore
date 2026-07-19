@@ -10,7 +10,6 @@ lerna-debug.log*
 node_modules
 .expo
 dist
-dist-ssr
 playwright-report
 test-results
 
@@ -34,16 +33,13 @@ apps/*/.env.*
 *.sln
 *.sw?
 
-# UI/UX Pro Max (keep generated prompts ignored, but allow CI workflows)
+# Agent/tool metadata
 .github/*
 !.github/workflows/
 !.github/workflows/**
-.shared
 .claude/
-.firebase/
 .vercel/
 supabase/.temp/
-estimate.txt
 
 # Design handoff bundles (reference-only prototypes / assets)
 .design-handoff/

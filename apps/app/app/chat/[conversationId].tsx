@@ -31,7 +31,7 @@ async function loadMessages(conversationId: string) {
 }
 
 async function sendMessage(conversationId: string, content: string, clientMessageId: string, expectedUserId: string) {
-  const { error } = await (supabase as any).rpc('send_message_atomic', {
+  const { error } = await supabase.rpc('send_message_atomic', {
     p_conversation_id: conversationId,
     p_content: content,
     p_client_message_id: clientMessageId,

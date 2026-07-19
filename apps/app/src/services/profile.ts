@@ -38,7 +38,7 @@ export async function saveProfile(profile: Partial<UserProfile>) {
 
   // Readiness/completeness, AI analysis and revisions are server-owned. Profile
   // edits use only the explicitly granted display/discovery columns.
-  const { data, error } = await (supabase.from('profiles') as any)
+  const { data, error } = await supabase.from('profiles')
     .update(payload)
     .eq('id', auth.user.id)
     .select('id')

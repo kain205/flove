@@ -1,7 +1,7 @@
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts } from '@/theme';
 
-const logoImage = require('../../../../logo.png');
+import logoImage from '../assets/logo.png';
 
 interface BrandMarkProps {
   size?: number;

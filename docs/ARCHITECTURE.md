@@ -25,7 +25,7 @@ Core flows currently represented in the repository:
 - Target surfaces: Android first, iOS later, web through Expo Web deployed on Vercel.
 - Backend: Supabase Cloud for Auth, Postgres, RLS, Storage, Realtime, RPC, and Edge Functions.
 - Shared code: `packages/core` for domain logic and `packages/supabase` for typed Supabase access.
-- Legacy implementation: the old Vite/Firebase/Capacitor app still exists under `src`, `functions`, `firebase.json`, `android`, and related files. Treat it as reference only. Do not build new product features there unless the user explicitly pauses/reverses the migration.
+- Legacy implementation: the old Vite/Firebase/Capacitor app was removed from the repository (July 2026 cleanup). F-Love is Expo + Supabase only; the pre-migration code is available in git history if ever needed.
 
 ## Repository Structure
 
@@ -51,11 +51,11 @@ supabase/tests
 docs
   Architecture and project documentation. This file is the architecture source of truth.
 
-src, functions, android, firebase.json, firestore.rules, storage.rules
-  Legacy Vite/Firebase/Capacitor implementation. Use for reference only during migration.
-
 scripts
-  Legacy/support scripts, including mock user seeding for the old Firebase flow.
+  Support scripts: Supabase mock-profile seeding (`seed-supabase-profiles.mjs`, `mock-profiles.mjs`).
+
+e2e
+  Playwright smoke tests for the Expo web build (`playwright.config.ts` at the root).
 ```
 
 ## Runtime Surfaces
@@ -63,7 +63,6 @@ scripts
 - Android: run the Expo app through Expo Go during early development, then use a development build when native/deep-link behavior needs validation.
 - Web: Expo Web from `apps/app`, exported to `dist` and deployed on Vercel.
 - iOS: configured in `apps/app/app.json` with bundle id and associated domains, but planned after Android-first validation.
-- Legacy web: Vite app can still be run only for comparison; it is not the target product surface.
 
 ## Environment Variables And Secrets
 
@@ -407,14 +406,6 @@ Usually use one Expo Metro server:
 
 Android development requires the usual Android SDK/emulator or a device with ADB available. Use a development build later when OAuth, Android App Links, or other native behavior must be validated beyond Expo Go.
 
-Run the legacy Vite app only for comparison:
-
-```bash
-npm run dev:legacy
-```
-
-Do not add new product features to the legacy Firebase/Capacitor app unless explicitly instructed.
-
 ## Testing And Verification
 
 Actual scripts currently available:
@@ -455,10 +446,9 @@ Completed backend reliability v2 in the repository:
 - Vercel config exists at `apps/app/vercel.json`.
 - Client Supabase env template exists at `apps/app/.env.example`.
 
-Legacy still present:
-
-- Vite/Firebase/Capacitor code remains under `src`, `functions`, `android`, and Firebase config/rules files.
-- Legacy Firebase env may exist in root `.env.local`; it is ignored and should be treated as legacy-only.
+Legacy status: the Vite/Firebase/Capacitor code, its configs (`firebase.json`, rules files,
+`capacitor.config.ts`, root Vite/Tailwind configs), the Android Capacitor project, and the legacy
+Firebase seeder/env were deleted in the July 2026 cleanup. Recover from git history if ever needed.
 
 Deployment/production follow-ups:
 
@@ -474,7 +464,6 @@ Deployment/production follow-ups:
 - TODO: add explicit block controls to matching, chat, and Blind Date UI; AI Picks report-and-hide and
   the live safety recheck are already wired.
 - TODO: tune the v2 candidate cap, HNSW recall and deterministic weights from real latency/feedback data.
-- TODO: remove Firebase/Capacitor/legacy web once Expo app reaches feature parity and cleanup is approved.
 
 ## Agent Rules
 

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { colors, gradients, radii } from '@/theme';
 
-const logoImage = require('../../../../logo.png');
+import logoImage from '../assets/logo.png';
 
 function goLogin() {
   router.push('/login');

@@ -1197,6 +1197,11 @@ export type Database = {
         }[]
       }
       archive_ai_job: { Args: { p_msg_id: number }; Returns: boolean }
+      assert_onboarding_draft_v2: {
+        Args: { p_draft: Json }
+        Returns: undefined
+      }
+      before_user_created_require_fpt: { Args: { event: Json }; Returns: Json }
       claim_ai_rate_limit: {
         Args: {
           p_limit: number
@@ -1229,15 +1234,6 @@ export type Database = {
           retry_after: string
         }[]
       }
-      confirm_onboarding_profile_atomic: {
-        Args: {
-          p_analysis_revision: number
-          p_draft_revision: number
-          p_profile: Json
-          p_user_id: string
-        }
-        Returns: Json
-      }
       complete_daily_match_enrichment: {
         Args: {
           p_attempt_count: number
@@ -1255,6 +1251,15 @@ export type Database = {
           p_vectors: Json
         }
         Returns: boolean
+      }
+      confirm_onboarding_profile_atomic: {
+        Args: {
+          p_analysis_revision: number
+          p_draft_revision: number
+          p_profile: Json
+          p_user_id: string
+        }
+        Returns: Json
       }
       delete_ai_job: { Args: { p_msg_id: number }; Returns: boolean }
       enqueue_ai_job: {
@@ -1309,10 +1314,76 @@ export type Database = {
           waiting: boolean
         }[]
       }
+      find_blind_date_partner_atomic_internal: {
+        Args: { p_masked_name: string }
+        Returns: {
+          conversation_id: string
+          partner_id: string
+          partner_masked_name: string
+          session_id: string
+          waiting: boolean
+        }[]
+      }
       flove_business_date: { Args: never; Returns: string }
+      get_backend_v2_alerts: {
+        Args: never
+        Returns: {
+          code: string
+          observed_at: string
+          observed_value: number
+          severity: string
+          threshold_value: number
+        }[]
+      }
+      get_blind_date_session: {
+        Args: { p_session_id: string }
+        Returns: {
+          conversation_id: string
+          is_revealed: boolean
+          partner_id: string
+          partner_masked_name: string
+          requested_by_me: boolean
+          requested_by_partner: boolean
+          session_id: string
+        }[]
+      }
+      get_blind_date_session_for_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          conversation_id: string
+          is_revealed: boolean
+          partner_id: string
+          partner_masked_name: string
+          requested_by_me: boolean
+          requested_by_partner: boolean
+          session_id: string
+        }[]
+      }
       get_daily_match_rows_v2: {
         Args: { p_batch_id: string; p_user_id: string }
-        Returns: Database["public"]["Tables"]["curated_matches"]["Row"][]
+        Returns: {
+          ai_reason: string
+          batch_id: string
+          candidate_id: string
+          candidate_snapshot: Json
+          compatibility_label: string
+          compatibility_score: number
+          created_at: string
+          decided_at: string | null
+          feedback_note: string | null
+          feedback_tags: string[]
+          id: string
+          pair_key: string
+          status: Database["public"]["Enums"]["curated_match_status"]
+          suggested_opener: string | null
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "curated_matches"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_match_candidates: {
         Args: { p_limit?: number; p_user_id: string }
@@ -1344,11 +1415,7 @@ export type Database = {
         }[]
       }
       get_match_candidates_v2: {
-        Args: {
-          p_cooldown_days?: number
-          p_limit?: number
-          p_user_id: string
-        }
+        Args: { p_cooldown_days?: number; p_limit?: number; p_user_id: string }
         Returns: {
           age: number
           age_pref_max: number
@@ -1357,8 +1424,8 @@ export type Database = {
           appearance_preference: Json
           avatar_url: string
           bio: string
-          candidate_to_preference: number
           campus: Database["public"]["Enums"]["campus"]
+          candidate_to_preference: number
           coarse_score: number
           communication_similarity: number
           dating_goals: string[]
@@ -1385,69 +1452,8 @@ export type Database = {
         Args: { p_cooldown_days?: number; p_user_id: string }
         Returns: Json
       }
-      get_backend_v2_alerts: {
-        Args: never
-        Returns: {
-          code: string
-          observed_at: string
-          observed_value: number
-          severity: string
-          threshold_value: number
-        }[]
-      }
-      mark_profile_embedding_processing: {
-        Args: { p_profile_revision: number; p_user_id: string }
-        Returns: boolean
-      }
-      match_pair_live_eligible: {
-        Args: { p_candidate_id: string; p_user_id: string }
-        Returns: boolean
-      }
-      pair_key_for: { Args: { a: string; b: string }; Returns: string }
-      read_ai_jobs: {
-        Args: { p_batch_size?: number; p_visibility_timeout?: number }
-        Returns: {
-          enqueued_at: string
-          message: Json
-          msg_id: number
-          read_ct: number
-          vt: string
-        }[]
-      }
-      request_reveal_atomic: {
-        Args: { p_expected_user_id?: string; p_session_id: string }
-        Returns: {
-          accepted: boolean
-          is_revealed: boolean
-          partner_id: string | null
-          requested_by_me: boolean
-          requested_by_partner: boolean
-        }[]
-      }
-      get_blind_date_session: {
-        Args: { p_session_id: string }
-        Returns: {
-          conversation_id: string
-          is_revealed: boolean
-          partner_id: string | null
-          partner_masked_name: string
-          requested_by_me: boolean
-          requested_by_partner: boolean
-          session_id: string
-        }[]
-      }
-      get_blind_date_session_for_conversation: {
-        Args: { p_conversation_id: string }
-        Returns: {
-          conversation_id: string
-          is_revealed: boolean
-          partner_id: string | null
-          partner_masked_name: string
-          requested_by_me: boolean
-          requested_by_partner: boolean
-          session_id: string
-        }[]
-      }
+      jsonb_array_or_empty: { Args: { p_value: Json }; Returns: Json }
+      jsonb_object_or_empty: { Args: { p_value: Json }; Returns: Json }
       list_conversation_messages: {
         Args: { p_conversation_id: string; p_limit?: number }
         Returns: {
@@ -1468,6 +1474,66 @@ export type Database = {
           unread_count: number
         }[]
       }
+      mark_profile_embedding_processing: {
+        Args: { p_profile_revision: number; p_user_id: string }
+        Returns: boolean
+      }
+      match_pair_live_eligible: {
+        Args: { p_candidate_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      normalize_profile_text_array: {
+        Args: { p_max_items: number; p_max_length: number; p_values: string[] }
+        Returns: string[]
+      }
+      pair_key_for: { Args: { a: string; b: string }; Returns: string }
+      profile_hard_dealbreakers: {
+        Args: { p_profile: Database["public"]["Tables"]["profiles"]["Row"] }
+        Returns: string[]
+      }
+      profile_height_hard_compatible: {
+        Args: {
+          p_target: Database["public"]["Tables"]["profiles"]["Row"]
+          p_viewer: Database["public"]["Tables"]["profiles"]["Row"]
+        }
+        Returns: boolean
+      }
+      profile_match_tokens: {
+        Args: { p_profile: Database["public"]["Tables"]["profiles"]["Row"] }
+        Returns: string[]
+      }
+      profile_matching_signals: {
+        Args: { p_profile: Database["public"]["Tables"]["profiles"]["Row"] }
+        Returns: Json
+      }
+      read_ai_jobs: {
+        Args: { p_batch_size?: number; p_visibility_timeout?: number }
+        Returns: {
+          enqueued_at: string
+          message: Json
+          msg_id: number
+          read_ct: number
+          vt: string
+        }[]
+      }
+      request_reveal_atomic: {
+        Args: { p_expected_user_id?: string; p_session_id: string }
+        Returns: {
+          accepted: boolean
+          is_revealed: boolean
+          partner_id: string
+          requested_by_me: boolean
+          requested_by_partner: boolean
+        }[]
+      }
+      request_reveal_atomic_internal: {
+        Args: { p_session_id: string }
+        Returns: {
+          accepted: boolean
+          is_revealed: boolean
+          reveal_requests: Json
+        }[]
+      }
       save_onboarding_analysis: {
         Args: {
           p_analysis: Json
@@ -1475,7 +1541,10 @@ export type Database = {
           p_draft_revision: number
           p_user_id: string
         }
-        Returns: { analysis: Json; analysis_revision: number }[]
+        Returns: {
+          analysis: Json
+          analysis_revision: number
+        }[]
       }
       save_onboarding_draft: {
         Args: {
@@ -1484,7 +1553,23 @@ export type Database = {
           p_expected_user_id?: string
           p_onboarding_version?: number
         }
-        Returns: Database["public"]["Tables"]["onboarding_drafts"]["Row"][]
+        Returns: {
+          analysis: Json | null
+          analysis_revision: number | null
+          analysis_source: string | null
+          created_at: string
+          draft: Json
+          draft_revision: number
+          onboarding_version: number
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "onboarding_drafts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       save_preference_chat_turn_atomic: {
         Args: {
@@ -1512,6 +1597,7 @@ export type Database = {
           message_id: string
         }[]
       }
+      snapshot_match_tokens: { Args: { p_snapshot: Json }; Returns: string[] }
       submit_match_feedback_atomic: {
         Args: {
           p_decision: Database["public"]["Enums"]["feedback_decision"]
@@ -1527,6 +1613,14 @@ export type Database = {
           match_id: string
           status: Database["public"]["Enums"]["curated_match_status"]
         }[]
+      }
+      text_array_overlap_ratio: {
+        Args: { p_left: string[]; p_right: string[] }
+        Returns: number
+      }
+      vector_cosine_similarity: {
+        Args: { p_left: string; p_right: string }
+        Returns: number
       }
     }
     Enums: {

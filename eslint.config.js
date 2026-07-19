@@ -5,7 +5,9 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "android/**/build/**"] },
+  // supabase/functions is Deno code, linted by `deno lint`/`deno check` (see deno.json).
+  // apps/app has no local config: `expo lint` resolves to this file too.
+  { ignores: ["**/dist/**", "**/.expo/**", "**/node_modules/**", "supabase/functions/**"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

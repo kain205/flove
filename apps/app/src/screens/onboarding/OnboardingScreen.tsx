@@ -43,10 +43,10 @@ import {
   type UserProfile,
 } from '@flove/core';
 import { useAuth } from '@/providers/AuthProvider';
+import logoImage from '../../assets/logo.png';
 
 const wideBreakpoint = 900;
 const reviewStep = 6;
-const logoImage = require('../../../../../logo.png');
 
 const schoolOptions: Array<{ label: string; campus: Campus }> = [
   { label: 'Đại học Bách khoa Hà Nội (HUST)', campus: 'Hanoi' },

@@ -8,7 +8,7 @@ import {
   type UserProfile,
 } from '@flove/core';
 import type { FloveSupabaseClient } from './client';
-import type { Database } from './database.types';
+import type { Database, Json } from './database.types';
 import { curatedMatchFromRow, dailyMatchBatchFromRows, userProfileFromRow } from './mappers';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -123,10 +123,18 @@ export class OnboardingDraftConflictError extends Error {
   }
 }
 
+interface OnboardingDraftRowShape {
+  draft?: unknown;
+  draft_revision?: unknown;
+  analysis?: unknown;
+  analysis_revision?: unknown;
+  updated_at?: string | null;
+}
+
 function onboardingDraftFromRow(value: unknown): PersistedOnboardingDraft | null {
   const row = Array.isArray(value) ? value[0] : value;
   if (!row || typeof row !== 'object') return null;
-  const data = row as Record<string, any>;
+  const data = row as OnboardingDraftRowShape;
   const draft = normalizeOnboardingDraft(data.draft);
   if (!draft) return null;
   return {
@@ -149,7 +157,7 @@ export async function getOnboardingDraft(
   if (expectedUserId && auth.user.id !== expectedUserId) {
     throw new Error('Session changed while loading onboarding draft.');
   }
-  const { data, error } = await (client as any)
+  const { data, error } = await client
     .from('onboarding_drafts')
     .select('draft,draft_revision,analysis,analysis_revision,updated_at')
     .eq('user_id', expectedUserId ?? auth.user.id)
@@ -174,9 +182,10 @@ export async function saveOnboardingDraft(
     throw new Error('Session changed while saving draft.');
   }
 
-  const { data, error } = await (client as any).rpc('save_onboarding_draft', {
-    p_draft: draft,
-    p_expected_revision: expectedRevision > 0 ? expectedRevision : null,
+  const { data, error } = await client.rpc('save_onboarding_draft', {
+    // The RPC accepts arbitrary JSON for the draft; Json is structurally open here.
+    p_draft: draft as unknown as Json,
+    p_expected_revision: expectedRevision > 0 ? expectedRevision : undefined,
     p_onboarding_version: draft.version,
     p_expected_user_id: expectedUserId ?? auth.user.id,
   });

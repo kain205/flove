@@ -18,7 +18,6 @@ F-Love is an AI-curated dating app for FPT students. Instead of swipe-based disc
 - Expo Router, React Query, i18next, lucide-react-native
 - Supabase Auth, Postgres, Storage, Realtime, Edge Functions
 - Shared TypeScript packages in `packages/core` and `packages/supabase`
-- Legacy Vite/Firebase/Capacitor app kept temporarily as reference only
 - i18next
 
 ## Architecture
@@ -32,8 +31,6 @@ npm install
 npm run dev:app
 ```
 
-Use `npm run dev:legacy` only when comparing behavior against the temporary legacy web app.
-
 The primary app uses Supabase Cloud. Create `apps/app/.env.local` from `apps/app/.env.example`:
 
 ```bash
@@ -41,13 +38,10 @@ EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
-The root `.env.local` is legacy Firebase config only and is ignored by git.
-
 ## Checks
 
 ```bash
-npm run test:core
-npm --workspace @flove/supabase run test
+npm test
 npm --workspace @flove/app run typecheck
 npm run build:packages
 ```
@@ -94,7 +88,7 @@ Configure Supabase Auth redirect URLs in the Dashboard:
 
 ## Vercel
 
-Deploy the Expo Web output from `apps/app`, not the legacy Vite app.
+Deploy the Expo Web output from `apps/app`.
 
 Vercel project settings:
 
