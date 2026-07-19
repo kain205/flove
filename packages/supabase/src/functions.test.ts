@@ -6,7 +6,11 @@ import {
   dailyMatchesResultFromPayload,
   findBlindDatePartner,
   getBlindDateSessionForConversation,
+  getLearningCourse,
+  learningCourseFromPayload,
+  listConversationSummaries,
   listConversationMessages,
+  listLearningCourses,
   markConversationRead,
   requestBlindDateReveal,
   sendPreferenceChatMessage,
@@ -556,5 +560,101 @@ describe('preference chat query contract', () => {
     };
     await expect(getPreferenceChatMessages(client as never, 'u1')).rejects.toThrow(/Session changed/);
     expect(queried).toBe(false);
+  });
+});
+
+describe('relationship learning contracts', () => {
+  const coursePayload = {
+    id: 'healthy-love-101-v1',
+    slug: 'yeu-lanh-manh-101',
+    title: 'Yêu lành mạnh 101',
+    subtitle: 'Hiểu mình',
+    description: 'Bốn bài ngắn.',
+    durationMinutes: 24,
+    lessonCount: 1,
+    isFree: true,
+    contentVersion: 1,
+    sourceLinks: [{ label: 'Official source', url: 'https://example.test/course' }],
+    enrollment: {
+      status: 'in_progress',
+      progressPercent: 25,
+      currentLesson: 1,
+      enrolledAt: '2026-07-19T00:00:00.000Z',
+      completedAt: null,
+    },
+    lessons: [{
+      id: 'lesson-1',
+      position: 1,
+      eyebrow: 'BÀI 1',
+      title: 'Tín hiệu tốt',
+      summary: 'Nhận diện.',
+      durationMinutes: 6,
+      contentBlocks: [{ kind: 'lead', title: 'Bình yên', body: 'Nội dung gốc.' }],
+      quiz: { question: 'Điều nào đúng?', options: ['A', 'B'], explanation: 'Vì B.' },
+      progress: null,
+    }],
+  };
+
+  it('strictly hydrates the published course payload', () => {
+    expect(learningCourseFromPayload(coursePayload)).toMatchObject({
+      id: 'healthy-love-101-v1',
+      enrollment: { status: 'in_progress', progressPercent: 25 },
+      lessons: [{ id: 'lesson-1', contentBlocks: [{ kind: 'lead' }] }],
+    });
+  });
+
+  it('rejects malformed quiz collections at the client boundary', () => {
+    expect(() => learningCourseFromPayload({
+      ...coursePayload,
+      lessons: [{ ...coursePayload.lessons[0], quiz: { question: 'Missing options' } }],
+    })).toThrow(/quiz options/i);
+  });
+
+  it('maps course catalog and detail RPCs without direct table reads', async () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      rpc: async (name: string, args?: unknown) => {
+        calls.push([name, args]);
+        if (name === 'get_learning_course') return { data: coursePayload, error: null };
+        return {
+          data: [{
+            course_id: 'healthy-love-101-v1', slug: 'yeu-lanh-manh-101', title: 'Yêu lành mạnh 101',
+            subtitle: 'Hiểu mình', description: 'Bốn bài ngắn.', duration_minutes: 24, lesson_count: 4,
+            is_free: true, enrollment_status: null, progress_percent: 0, current_lesson: 1,
+            enrolled_at: null, completed_at: null,
+          }],
+          error: null,
+        };
+      },
+    };
+    await expect(listLearningCourses(client as never)).resolves.toHaveLength(1);
+    await expect(getLearningCourse(client as never, 'yeu-lanh-manh-101')).resolves.toMatchObject({ id: 'healthy-love-101-v1' });
+    expect(calls).toEqual([
+      ['list_learning_courses', undefined],
+      ['get_learning_course', { p_slug: 'yeu-lanh-manh-101' }],
+    ]);
+  });
+});
+
+describe('conversation summary privacy contract', () => {
+  it('maps real partner display data but drops any unexpected UUID field', async () => {
+    const client = {
+      rpc: async () => ({
+        data: [{
+          conversation_id: 'c1', partner_name: 'Mai', partner_avatar_url: '', is_anonymous: false,
+          last_message_content: 'Chào bạn', last_message_created_at: '2026-07-19T00:00:00.000Z',
+          last_message_is_mine: false, unread_count: 2, updated_at: '2026-07-19T00:00:00.000Z',
+          partner_id: 'must-not-cross-the-dto',
+        }],
+        error: null,
+      }),
+    };
+    const [summary] = await listConversationSummaries(client as never, undefined, 12);
+    expect(summary).toEqual({
+      conversationId: 'c1', partnerName: 'Mai', partnerAvatarUrl: '', isAnonymous: false,
+      lastMessageContent: 'Chào bạn', lastMessageCreatedAt: '2026-07-19T00:00:00.000Z',
+      lastMessageIsMine: false, unreadCount: 2, updatedAt: '2026-07-19T00:00:00.000Z',
+    });
+    expect(summary).not.toHaveProperty('partnerId');
   });
 });

@@ -19,8 +19,12 @@ Core flows currently represented in the repository:
   open/stub access, feedback, and server-side mutual accept.
 - F-Love AI Coach: Vietnamese preference coaching with canonical preferred/avoided soft-trait memory.
 - Messages/realtime chat: official conversations after mutual accept, plus private Wingman draft
-  suggestions that never enter the shared message stream until the user explicitly sends one.
-- Blind Date: transactional anonymous queue/session, participant-safe chat, and mutual reveal.
+  suggestions that never enter the shared message stream until the user explicitly sends one; a compact
+  authenticated widget reuses the same participant-safe reads, atomic send path, cache, and unread state.
+- Relationship learning: the free native `Yêu lành mạnh 101` micro-course uses private idempotent
+  enrollment/progress and original F-Love content with external sources linked only for further study.
+- Blind Date compatibility: new queue entry is removed from navigation; existing anonymous
+  conversations, participant-safe chat, and mutual reveal remain readable so historical sessions are not lost.
 - Safety: `reports`, `blocks`, `moderation_events`, and `user_safety_actions`; AI Picks exposes a report-and-hide action, while broader block controls remain a follow-up.
 
 ## Current Architecture Summary
@@ -47,7 +51,7 @@ supabase/migrations
   Cloud-first Postgres schema, enum types, RLS policies, storage policies, and RPC functions.
 
 supabase/functions
-  Supabase Edge Functions for AI Picks, feedback, mutual accept, AI Coach, private Wingman, Blind Date, and reveal.
+  Supabase Edge Functions for AI Picks, feedback, mutual accept, AI Coach, private Wingman, and legacy Blind Date/reveal compatibility.
 
 supabase/tests
   Database contract/RLS test files for the Supabase CLI test runner.
@@ -126,6 +130,10 @@ adds recoverable state without deleting v1 endpoints or data. `202607150001_blin
 adds the anonymous data boundary and the scoped one-release message compatibility policy.
 `202607190002_ai_picks_access_and_coaches.sql` adds the AI Picks access DTO/ledger, open-signup policy
 repairs, canonical Coach memory, and private Wingman context/cache contracts.
+`202607190003_relationship_course_and_chat.sql` adds the original published learning catalog, private
+course enrollment/progress RPCs, and identity-minimized conversation summary DTO used by inbox and widget.
+`202607190004_production_function_lint_fixes.sql` makes enum assignment explicit and removes output-column
+ambiguity from the batch unlock and lesson-completion upserts found by production schema lint.
 
 Important v2 objects and invariants:
 
@@ -188,6 +196,14 @@ Important v2 objects and invariants:
 - `get_blind_date_session` and `list_conversation_messages`: participant-scoped read contracts that hide
   raw session membership, UUID-keyed reveal state, message `sender_id`, and message idempotency keys.
   Message ownership is exposed only as the caller-relative `is_mine` boolean.
+- `learning_courses` and `learning_lessons` are service-managed editorial content. `course_enrollments`
+  and `course_lesson_progress` are private learner state; authenticated users have no direct table grants.
+  `list_learning_courses`, `get_learning_course`, `enroll_free_learning_course`, and
+  `complete_learning_lesson` provide published DTOs and idempotent owner-scoped progress. Reflections are
+  never included in matching, Coach, Wingman, Realtime, or another user's response.
+- `list_conversation_summaries` is the participant-safe inbox/header/widget contract. It returns only the
+  counterpart display name/avatar, relative last-message ownership, timestamps, and caller unread count;
+  counterpart UUIDs and raw participant membership never cross the DTO.
 - `public_profiles` remains a service-side candidate projection and includes only canonically ready,
   currently safe profiles. Authenticated clients cannot enumerate it or read `curated_matches` directly;
   AI Picks uses the service-only `get_daily_picks_safe` DTO. V2 own-profile queries and confirm responses explicitly omit vectors;
@@ -219,6 +235,9 @@ RLS is the real access-control boundary:
   non-anonymous participant conversations; its insert trigger keeps summary/unread updates atomic.
 - V2 message and all Blind Date queue writes are RPC-only. Queue rows cannot return to `waiting` after a session
   exists, preventing one participant from being paired twice.
+- Published course content and learner progress are exposed only through learning RPCs. Enrollment uses
+  a caller/request idempotency key; lesson completion validates quiz bounds and recomputes progress inside
+  the same transaction. Direct client table reads/writes are revoked.
 - Users can create/read their own reports and blocks.
 - Moderation events are hidden from clients.
 - Safety actions are readable by the affected user.
@@ -294,15 +313,19 @@ Expo Router routes:
 - `app/(tabs)/ai-picks.tsx`: typed loading/processing/empty/error/ready AI Picks states, a strict
   `revealed | locked` DTO boundary, truthful overall score/label display, idempotent decisions, and
   test-only simulated whole-batch unlock UI. It never fabricates component subscores or verification.
-- `app/(tabs)/blind-date.tsx`: Blind Date entry.
-- `app/(tabs)/messages.tsx`: conversation list.
+- `app/(tabs)/course.tsx`: free-course discovery, truthful enrollment state, and progress overview.
+- `app/(tabs)/blind-date.tsx`: compatibility redirect to the course tab; it no longer creates queue entries.
+- `app/course/[slug].tsx`: native lesson reader, quiz, private reflection, completion progress, and source links.
+- `app/(tabs)/messages.tsx`: participant-safe conversation list with real counterpart display data, last
+  message, timestamps, unread badges, search, and truthful loading/error/empty states.
 - `app/(tabs)/profile.tsx`: profile save/sign out shell.
 - `app/preference-chat.tsx`: Profile- and AI-Picks-reachable F-Love AI Coach with owner-scoped history,
   bounded input, under-18 disclosure, explicit retry UI, and stable idempotency keys.
 - `app/onboarding/index.tsx`: multi-step onboarding/profile interview (`src/screens/onboarding/OnboardingScreen.tsx`), guarded by an authenticated session.
 - `app/chat/[conversationId].tsx`: message list through the relative-ownership RPC, idempotent send,
-  atomic focus-time read acknowledgement, reload-safe Blind Date reveal controls, and a private Wingman
-  panel whose suggestions only fill the existing composer after optional overwrite confirmation.
+  atomic focus-time read acknowledgement, real counterpart header, timestamps/read state, reload-safe
+  legacy Blind Date reveal controls, and a private Wingman panel whose suggestions only fill the existing
+  composer after a cross-platform overwrite confirmation.
 
 Important app layers:
 
@@ -310,10 +333,12 @@ Important app layers:
 - `src/lib/secureStorage.ts`: uses SecureStore on native and localStorage/memory fallback on web.
 - `src/providers/AuthProvider.tsx`: Supabase session state.
 - `src/providers/AppProviders.tsx`: React Query provider and foreground focus handling.
-- `src/services/*`: app-facing service wrappers for auth, profile, matching/unlock, AI Coach, and Wingman.
+- `src/services/*`: app-facing service wrappers for auth, profile, matching/unlock, learning, conversations,
+  AI Coach, and Wingman.
 - `src/i18n/index.ts`: i18next setup.
 - `src/theme.ts`: design tokens (warm-orange palette, gradients, radii, spacing, fonts) shared across screens. Screens read tokens from here instead of hardcoding hex values.
-- `src/components/*`: shared React Native primitives — `Button` (gradient/secondary/light), `TextField`, `BrandMark`, `Chip`, `MeterBar`, `Avatar`, `Screen`.
+- `src/components/*`: shared React Native primitives — `Button` (gradient/secondary/light), `TextField`,
+  `BrandMark`, `Chip`, `MeterBar`, image-aware `Avatar`, `Screen`, and the authenticated `ChatWidget`.
 - `src/screens/*`: composed entry screens — `WebLanding` (web marketing landing), `Welcome` (native splash), and `onboarding/OnboardingScreen` (multi-step interview).
 - `src/services/photos.ts`: uploads a profile photo to the public `avatars` Storage bucket under a `${userId}/...` path and returns its public URL.
 
@@ -504,6 +529,12 @@ Completed backend reliability v2 in the repository:
 - AI Picks open/stub access, identity-free locked previews, simulated unlock ledger, open-signup policy
   repair, canonical Coach memory, generic assistant idempotency and private Wingman context are implemented
   as additive database/Edge contracts. Production remains in open mode.
+- The Blind Date tab is replaced by the free native relationship micro-course. Historical Blind Date
+  sessions remain compatible, while Messages, full chat, and the compact widget share the same safe DTOs.
+- Production migrations through `202607190004`, Auth/API/DB/Storage config, and all 11 Edge Functions were
+  deployed on 2026-07-19. Generated client types come from that linked production schema, which passes
+  Supabase schema lint with no warnings or errors. Vector Storage buckets stay explicitly disabled because
+  the app uses PostgreSQL `pgvector`, not the paid Storage vector-bucket product.
 - Shared packages exist in `packages/core` and `packages/supabase`.
 - Vercel config exists at `apps/app/vercel.json`.
 - Client Supabase env template exists at `apps/app/.env.example`.
@@ -516,14 +547,13 @@ Deployment/production follow-ups:
 
 - TODO: run the pre-migration inventory against production; the linked database was unreachable from
   this workspace, so production counts and actual p95 are not recorded here.
-- TODO: push the migration/config/functions, verify the open verified-email Auth hook with real password and Google
-  signups, configure worker Cron/Vault secrets, regenerate types from the real project, and execute the
-  staged 10/50/100 rollout.
+- TODO: verify the open verified-email Auth hook with real password and Google signups, configure worker
+  Cron/Vault secrets, and execute the staged 10/50/100 rollout. Migration/config/function deployment and
+  production type generation are complete.
 - TODO: benchmark candidate pools at 100/1,000/10,000 production-like rows with `EXPLAIN (ANALYZE,
   BUFFERS)` and tune indexes/limit from measured plans.
 - TODO: complete native avatar upload (currently web-only via DOM file input; native shows a "add photo later" prompt) and multi-photo support if the schema gains a `photos` column.
-- TODO: implement richer conversation participant/profile joins; realtime invalidation/recovery is wired.
-- TODO: add explicit block controls to matching, chat, and Blind Date UI; AI Picks report-and-hide and
+- TODO: add explicit block controls to matching and chat UI; AI Picks report-and-hide and
   the live safety recheck are already wired.
 - TODO: tune the v2 candidate cap, HNSW recall and deterministic weights from real latency/feedback data.
 

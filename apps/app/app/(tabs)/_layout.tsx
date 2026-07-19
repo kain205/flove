@@ -1,9 +1,10 @@
 import { Redirect, Tabs } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { isProfileReady } from '@flove/core';
-import { MessageCircle, Shuffle, Sparkles, UserRound } from 'lucide-react-native';
+import { BookOpenCheck, MessageCircle, Sparkles, UserRound } from 'lucide-react-native';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Button } from '@/components/Button';
+import { ChatWidget } from '@/components/ChatWidget';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/providers/AuthProvider';
 import { loadCurrentProfile, profileQueryKey } from '@/services/profile';
@@ -35,7 +36,8 @@ export default function TabsLayout() {
   if (!isProfileReady(profileQuery.data)) return <Redirect href="/onboarding" />;
 
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primaryStrong,
@@ -49,11 +51,14 @@ export default function TabsLayout() {
         },
         tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' },
       }}
-    >
-      <Tabs.Screen name="ai-picks" options={{ title: t('aiPicks'), tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} /> }} />
-      <Tabs.Screen name="blind-date" options={{ title: t('blindDate'), tabBarIcon: ({ color, size }) => <Shuffle color={color} size={size} /> }} />
-      <Tabs.Screen name="messages" options={{ title: t('messages'), tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} /> }} />
-      <Tabs.Screen name="profile" options={{ title: t('profile'), tabBarIcon: ({ color, size }) => <UserRound color={color} size={size} /> }} />
-    </Tabs>
+      >
+        <Tabs.Screen name="ai-picks" options={{ title: t('aiPicks'), tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} /> }} />
+        <Tabs.Screen name="course" options={{ title: t('course'), tabBarIcon: ({ color, size }) => <BookOpenCheck color={color} size={size} /> }} />
+        <Tabs.Screen name="blind-date" options={{ href: null }} />
+        <Tabs.Screen name="messages" options={{ title: t('messages'), tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} /> }} />
+        <Tabs.Screen name="profile" options={{ title: t('profile'), tabBarIcon: ({ color, size }) => <UserRound color={color} size={size} /> }} />
+      </Tabs>
+      <ChatWidget />
+    </View>
   );
 }

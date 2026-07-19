@@ -98,30 +98,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ai_rate_limit_buckets: {
-        Row: {
-          request_count: number
-          scope: string
-          updated_at: string
-          user_id: string
-          window_start: string
-        }
-        Insert: {
-          request_count?: number
-          scope: string
-          updated_at?: string
-          user_id: string
-          window_start: string
-        }
-        Update: {
-          request_count?: number
-          scope?: string
-          updated_at?: string
-          user_id?: string
-          window_start?: string
-        }
-        Relationships: []
-      }
       ai_pick_product_config: {
         Row: {
           mode: Database["public"]["Enums"]["ai_pick_product_mode"]
@@ -237,6 +213,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_rate_limit_buckets: {
+        Row: {
+          request_count: number
+          scope: string
+          updated_at: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          request_count?: number
+          scope: string
+          updated_at?: string
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          request_count?: number
+          scope?: string
+          updated_at?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       blind_date_queue: {
         Row: {
@@ -461,6 +461,136 @@ export type Database = {
           },
         ]
       }
+      course_enrollments: {
+        Row: {
+          client_request_id: string
+          completed_at: string | null
+          course_id: string
+          current_lesson: number
+          enrolled_at: string
+          progress_percent: number
+          started_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_request_id: string
+          completed_at?: string | null
+          course_id: string
+          current_lesson?: number
+          enrolled_at?: string
+          progress_percent?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_request_id?: string
+          completed_at?: string | null
+          course_id?: string
+          current_lesson?: number
+          enrolled_at?: string
+          progress_percent?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_enrollments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "learning_courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_enrollments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_enrollments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      course_lesson_progress: {
+        Row: {
+          completed_at: string
+          course_id: string
+          is_correct: boolean
+          lesson_id: string
+          reflection: string
+          selected_answer: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string
+          course_id: string
+          is_correct: boolean
+          lesson_id: string
+          reflection?: string
+          selected_answer: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string
+          course_id?: string
+          is_correct?: boolean
+          lesson_id?: string
+          reflection?: string
+          selected_answer?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_lesson_progress_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "learning_courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "learning_lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_lesson_progress_user_id_course_id_fkey"
+            columns: ["user_id", "course_id"]
+            isOneToOne: false
+            referencedRelation: "course_enrollments"
+            referencedColumns: ["user_id", "course_id"]
+          },
+          {
+            foreignKeyName: "course_lesson_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_lesson_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       curated_matches: {
         Row: {
           ai_reason: string
@@ -652,6 +782,107 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_courses: {
+        Row: {
+          content_version: number
+          created_at: string
+          description: string
+          duration_minutes: number
+          id: string
+          is_free: boolean
+          lesson_count: number
+          published_at: string | null
+          slug: string
+          source_links: Json
+          status: string
+          subtitle: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content_version?: number
+          created_at?: string
+          description?: string
+          duration_minutes: number
+          id: string
+          is_free?: boolean
+          lesson_count: number
+          published_at?: string | null
+          slug: string
+          source_links?: Json
+          status?: string
+          subtitle?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content_version?: number
+          created_at?: string
+          description?: string
+          duration_minutes?: number
+          id?: string
+          is_free?: boolean
+          lesson_count?: number
+          published_at?: string | null
+          slug?: string
+          source_links?: Json
+          status?: string
+          subtitle?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      learning_lessons: {
+        Row: {
+          content_blocks: Json
+          course_id: string
+          created_at: string
+          duration_minutes: number
+          eyebrow: string
+          id: string
+          position: number
+          quiz: Json
+          summary: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content_blocks: Json
+          course_id: string
+          created_at?: string
+          duration_minutes: number
+          eyebrow?: string
+          id: string
+          position: number
+          quiz: Json
+          summary?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content_blocks?: Json
+          course_id?: string
+          created_at?: string
+          duration_minutes?: number
+          eyebrow?: string
+          id?: string
+          position?: number
+          quiz?: Json
+          summary?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_lessons_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "learning_courses"
             referencedColumns: ["id"]
           },
         ]
@@ -1383,13 +1614,6 @@ export type Database = {
       }
     }
     Functions: {
-      accept_curated_match: {
-        Args: { p_match_id: string; p_note?: string; p_tags?: string[] }
-        Returns: {
-          conversation_id: string
-          is_mutual: boolean
-        }[]
-      }
       abandon_ai_assistant_request: {
         Args: {
           p_claim_token: string
@@ -1400,12 +1624,32 @@ export type Database = {
         }
         Returns: boolean
       }
+      accept_curated_match: {
+        Args: { p_match_id: string; p_note?: string; p_tags?: string[] }
+        Returns: {
+          conversation_id: string
+          is_mutual: boolean
+        }[]
+      }
       archive_ai_job: { Args: { p_msg_id: number }; Returns: boolean }
       assert_onboarding_draft_v2: {
         Args: { p_draft: Json }
         Returns: undefined
       }
       before_user_created_require_fpt: { Args: { event: Json }; Returns: Json }
+      claim_ai_assistant_request: {
+        Args: {
+          p_client_request_id: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_scope: string
+        }
+        Returns: {
+          claim_token: string
+          request_status: string
+          response_payload: Json
+        }[]
+      }
       claim_ai_rate_limit: {
         Args: {
           p_limit: number
@@ -1417,19 +1661,6 @@ export type Database = {
           allowed: boolean
           remaining: number
           reset_at: string
-        }[]
-      }
-      claim_ai_assistant_request: {
-        Args: {
-          p_client_request_id: string
-          p_expected_user_id: string
-          p_request_fingerprint: string
-          p_scope: string
-        }
-        Returns: {
-          claim_token: string | null
-          request_status: string
-          response_payload: Json | null
         }[]
       }
       claim_daily_match_batch: {
@@ -1460,6 +1691,24 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["match_enrichment_status"]
       }
+      complete_learning_lesson: {
+        Args: {
+          p_course_id: string
+          p_lesson_id: string
+          p_reflection?: string
+          p_selected_answer: number
+        }
+        Returns: {
+          completed_at: string
+          course_id: string
+          current_lesson: number
+          enrollment_status: string
+          is_correct: boolean
+          lesson_completed: boolean
+          lesson_id: string
+          progress_percent: number
+        }[]
+      }
       complete_profile_embedding_job: {
         Args: {
           p_error_code?: string
@@ -1487,6 +1736,17 @@ export type Database = {
         }
         Returns: number
       }
+      enroll_free_learning_course: {
+        Args: { p_client_request_id: string; p_course_id: string }
+        Returns: {
+          applied: boolean
+          course_id: string
+          current_lesson: number
+          enrolled_at: string
+          enrollment_status: string
+          progress_percent: number
+        }[]
+      }
       fail_daily_match_batch: {
         Args: {
           p_batch_id: string
@@ -1500,6 +1760,20 @@ export type Database = {
           batch_id: string
           batch_status: Database["public"]["Enums"]["daily_match_batch_status"]
           retry_after: string
+        }[]
+      }
+      finalize_ai_assistant_request: {
+        Args: {
+          p_claim_token: string
+          p_client_request_id: string
+          p_expected_user_id: string
+          p_request_fingerprint: string
+          p_response_payload: Json
+          p_scope: string
+        }
+        Returns: {
+          request_status: string
+          response_payload: Json
         }[]
       }
       finalize_daily_match_batch: {
@@ -1520,20 +1794,6 @@ export type Database = {
           business_date: string
           enrichment_status: Database["public"]["Enums"]["match_enrichment_status"]
           match_count: number
-        }[]
-      }
-      finalize_ai_assistant_request: {
-        Args: {
-          p_claim_token: string
-          p_client_request_id: string
-          p_expected_user_id: string
-          p_request_fingerprint: string
-          p_response_payload: Json
-          p_scope: string
-        }
-        Returns: {
-          request_status: string
-          response_payload: Json
         }[]
       }
       finalize_preference_coach_request: {
@@ -1614,7 +1874,7 @@ export type Database = {
           p_limit?: number
         }
         Returns: {
-          eligibility_reason: string | null
+          eligibility_reason: string
           eligible: boolean
           is_anonymous: boolean
           messages: Json
@@ -1637,6 +1897,7 @@ export type Database = {
           feedback_tags: string[]
           id: string
           pair_key: string
+          preview_id: string
           status: Database["public"]["Enums"]["curated_match_status"]
           suggested_opener: string | null
           user_id: string
@@ -1652,29 +1913,30 @@ export type Database = {
         Args: { p_batch_id: string; p_user_id: string }
         Returns: {
           access_state: string
-          ai_reason: string | null
+          ai_reason: string
           batch_id: string
           business_date: string
-          candidate_id: string | null
-          candidate_snapshot: Json | null
-          compatibility_label: string | null
-          compatibility_score: number | null
-          created_at: string | null
-          decided_at: string | null
-          feedback_note: string | null
-          feedback_tags: string[] | null
-          kind: string | null
+          candidate_id: string
+          candidate_snapshot: Json
+          compatibility_label: string
+          compatibility_score: number
+          created_at: string
+          decided_at: string
+          feedback_note: string
+          feedback_tags: string[]
+          kind: string
           locked_count: number
-          match_id: string | null
-          match_status: Database["public"]["Enums"]["curated_match_status"] | null
-          pair_key: string | null
-          preview_id: string | null
+          match_id: string
+          match_status: Database["public"]["Enums"]["curated_match_status"]
+          pair_key: string
+          preview_id: string
           price_vnd: number
           product_mode: string
-          suggested_opener: string | null
-          user_id: string | null
+          suggested_opener: string
+          user_id: string
         }[]
       }
+      get_learning_course: { Args: { p_slug: string }; Returns: Json }
       get_match_candidates: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {
@@ -1801,6 +2063,38 @@ export type Database = {
           is_read: boolean
         }[]
       }
+      list_conversation_summaries: {
+        Args: { p_conversation_id?: string; p_limit?: number }
+        Returns: {
+          conversation_id: string
+          is_anonymous: boolean
+          last_message_content: string
+          last_message_created_at: string
+          last_message_is_mine: boolean
+          partner_avatar_url: string
+          partner_name: string
+          unread_count: number
+          updated_at: string
+        }[]
+      }
+      list_learning_courses: {
+        Args: never
+        Returns: {
+          completed_at: string
+          course_id: string
+          current_lesson: number
+          description: string
+          duration_minutes: number
+          enrolled_at: string
+          enrollment_status: string
+          is_free: boolean
+          lesson_count: number
+          progress_percent: number
+          slug: string
+          subtitle: string
+          title: string
+        }[]
+      }
       mark_ai_assistant_provider_started: {
         Args: {
           p_claim_token: string
@@ -1862,6 +2156,10 @@ export type Database = {
           vt: string
         }[]
       }
+      repair_daily_match_teaser: {
+        Args: { p_batch_id: string }
+        Returns: string
+      }
       request_reveal_atomic: {
         Args: { p_expected_user_id?: string; p_session_id: string }
         Returns: {
@@ -1879,10 +2177,6 @@ export type Database = {
           is_revealed: boolean
           reveal_requests: Json
         }[]
-      }
-      repair_daily_match_teaser: {
-        Args: { p_batch_id: string }
-        Returns: string | null
       }
       save_onboarding_analysis: {
         Args: {

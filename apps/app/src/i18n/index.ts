@@ -10,6 +10,7 @@ void i18n.use(initReactI18next).init({
       common: {
         aiPicks: 'AI Picks',
         blindDate: 'Blind Date',
+        course: 'Khóa học',
         messages: 'Tin nhắn',
         profile: 'Hồ sơ',
         login: 'Đăng nhập',
@@ -20,6 +21,7 @@ void i18n.use(initReactI18next).init({
       common: {
         aiPicks: 'AI Picks',
         blindDate: 'Blind Date',
+        course: 'Learn',
         messages: 'Messages',
         profile: 'Profile',
         login: 'Login',

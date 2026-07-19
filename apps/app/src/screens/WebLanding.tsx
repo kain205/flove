@@ -251,7 +251,7 @@ export function WebLanding() {
         <View style={styles.featureGrid}>
           <FeatureCard icon="✨" title="AI Matching" body="Gợi ý người phù hợp dựa trên dữ liệu và thuật toán tiên tiến, kèm điểm tương hợp rõ ràng." />
           <FeatureCard icon="💬" title="AI Wingman" body="Hỗ trợ mở lời và giao tiếp thông minh, tự tin hơn trong mọi cuộc trò chuyện." />
-          <FeatureCard icon="🎭" title="Blind Date" body="Trò chuyện ẩn danh trước, tiết lộ danh tính khi cả hai đã thực sự sẵn sàng." />
+          <FeatureCard icon="📖" title="Yêu lành mạnh 101" body="Khóa học miễn phí, ngắn gọn về ranh giới, giao tiếp và an toàn khi làm quen." />
         </View>
       </View>
 

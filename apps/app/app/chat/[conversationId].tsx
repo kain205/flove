@@ -2,17 +2,16 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   getBlindDateSession,
   getBlindDateSessionForConversation,
-  listConversationMessages,
-  markConversationRead,
   requestBlindDateReveal,
   type ConversationMessage,
 } from '@flove/supabase';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles } from 'lucide-react-native';
+import { ArrowLeft, LockKeyhole, RefreshCw, Send, Sparkles } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -26,28 +25,37 @@ import { Avatar } from '@/components/Avatar';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import {
+  acknowledgeConversation,
+  conversationMessagesQueryKey,
+  conversationSummariesQueryKey,
+  conversationSummaryQueryKey,
+  loadConversationMessages,
+  loadConversationSummary,
+  newClientMessageId,
+  sendSharedMessage,
+} from '@/services/conversations';
+import {
   askConversationWingman,
   newWingmanRequestId,
   type WingmanRequest,
 } from '@/services/wingman';
 import { colors, gradients, radii } from '@/theme';
 
-async function loadMessages(conversationId: string) {
-  return listConversationMessages(supabase, conversationId);
+function clockTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
-async function sendMessage(conversationId: string, content: string, clientMessageId: string, expectedUserId: string) {
-  const { error } = await supabase.rpc('send_message_atomic', {
-    p_conversation_id: conversationId,
-    p_content: content,
-    p_client_message_id: clientMessageId,
-    p_expected_user_id: expectedUserId,
-  });
-  if (error) throw error;
-}
-
-function messageId() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+function dayLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return 'Hôm nay';
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Hôm qua';
+  return new Intl.DateTimeFormat('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(date);
 }
 
 export default function ChatScreen() {
@@ -61,6 +69,7 @@ export default function ChatScreen() {
   const [wingmanOpen, setWingmanOpen] = useState(false);
   const [wingmanSuggestions, setWingmanSuggestions] = useState<[string, string, string] | null>(null);
   const [failedWingman, setFailedWingman] = useState<{ input: WingmanRequest; message: string } | null>(null);
+  const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
   const pendingSendRef = useRef<{ content: string; clientMessageId: string; userId: string } | null>(null);
   const markedReadVersionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
@@ -71,13 +80,19 @@ export default function ChatScreen() {
     setWingmanOpen(false);
     setWingmanSuggestions(null);
     setFailedWingman(null);
+    setPendingSuggestion(null);
     pendingSendRef.current = null;
     markedReadVersionRef.current = null;
   }, [conversationId, myId]);
 
   const query = useQuery({
-    queryKey: ['messages', myId, conversationId],
-    queryFn: () => loadMessages(conversationId),
+    queryKey: conversationMessagesQueryKey(myId, conversationId),
+    queryFn: () => loadConversationMessages(conversationId),
+    enabled: Boolean(conversationId && myId),
+  });
+  const summaryQuery = useQuery({
+    queryKey: conversationSummaryQueryKey(myId, conversationId),
+    queryFn: () => loadConversationSummary(conversationId),
     enabled: Boolean(conversationId && myId),
   });
   const blindSessionQuery = useQuery({
@@ -96,8 +111,8 @@ export default function ChatScreen() {
     const version = `${myId}:${conversationId}:${query.dataUpdatedAt}`;
     if (markedReadVersionRef.current === version) return;
     markedReadVersionRef.current = version;
-    void markConversationRead(supabase, conversationId)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['conversations', myId] }))
+    void acknowledgeConversation(conversationId)
+      .then(() => queryClient.invalidateQueries({ queryKey: conversationSummariesQueryKey(myId) }))
       .catch(() => {
         if (markedReadVersionRef.current === version) markedReadVersionRef.current = null;
       });
@@ -118,7 +133,12 @@ export default function ChatScreen() {
   });
   const mutation = useMutation({
     mutationFn: (input: { content: string; clientMessageId: string; userId: string }) =>
-      sendMessage(conversationId, input.content, input.clientMessageId, input.userId),
+      sendSharedMessage({
+        conversationId,
+        content: input.content,
+        clientMessageId: input.clientMessageId,
+        expectedUserId: input.userId,
+      }),
     onSuccess: (_result, input) => {
       if (input.userId !== myId) return;
       pendingSendRef.current = null;
@@ -126,12 +146,9 @@ export default function ChatScreen() {
       setWingmanOpen(false);
       setWingmanSuggestions(null);
       setFailedWingman(null);
-      void queryClient.invalidateQueries({ queryKey: ['messages', myId, conversationId] });
-      void queryClient.invalidateQueries({ queryKey: ['conversations', myId] });
-    },
-    onError: (error, input) => {
-      if (input.userId !== myId) return;
-      Alert.alert('Chưa gửi được tin nhắn', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+      void queryClient.invalidateQueries({ queryKey: conversationMessagesQueryKey(myId, conversationId) });
+      void queryClient.invalidateQueries({ queryKey: conversationSummariesQueryKey(myId) });
+      void queryClient.invalidateQueries({ queryKey: conversationSummaryQueryKey(myId, conversationId) });
     },
   });
   const wingmanMutation = useMutation({
@@ -182,19 +199,11 @@ export default function ChatScreen() {
   };
 
   const chooseSuggestion = (suggestion: string) => {
-    const apply = () => setContent(suggestion);
     if (content.trim() && content.trim() !== suggestion) {
-      Alert.alert(
-        'Thay nội dung đang soạn?',
-        'Gợi ý chỉ được điền vào ô soạn và sẽ không tự gửi.',
-        [
-          { text: 'Hủy', style: 'cancel' },
-          { text: 'Thay nội dung', onPress: apply },
-        ],
-      );
+      setPendingSuggestion(suggestion);
       return;
     }
-    apply();
+    setContent(suggestion);
   };
 
   const submit = () => {
@@ -204,7 +213,7 @@ export default function ChatScreen() {
     if (!myId) return;
     const input = pending?.content === trimmed && pending.userId === myId
       ? pending
-      : { content: trimmed, clientMessageId: messageId(), userId: myId };
+      : { content: trimmed, clientMessageId: newClientMessageId(), userId: myId };
     pendingSendRef.current = input;
     mutation.mutate(input);
   };
@@ -212,13 +221,16 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.back}>‹</Text>
+        <Pressable accessibilityLabel="Quay lại" onPress={() => router.back()} hitSlop={8} style={styles.backButton}>
+          <ArrowLeft color={colors.text} size={20} />
         </Pressable>
-        <Avatar name="Match" size={42} />
+        <Avatar imageUrl={summaryQuery.data?.partnerAvatarUrl} name={summaryQuery.data?.partnerName ?? '?'} size={43} />
         <View style={styles.headerCopy}>
-          <Text style={styles.headerName}>Cuộc trò chuyện</Text>
-          <Text style={styles.headerStatus}>● Đang hoạt động</Text>
+          <Text style={styles.headerName}>{summaryQuery.data?.partnerName ?? (summaryQuery.isLoading ? 'Đang tải…' : 'Cuộc trò chuyện')}</Text>
+          <View style={styles.headerStatusRow}>
+            {summaryQuery.data?.isAnonymous ? <LockKeyhole color={colors.muted} size={11} /> : null}
+            <Text style={styles.headerStatus}>{summaryQuery.data?.isAnonymous ? 'Danh tính đang được bảo vệ' : 'Kết nối qua F-Love'}</Text>
+          </View>
         </View>
         <Pressable
           accessibilityLabel={wingmanOpen ? 'Đóng Wingman' : 'Mở Wingman'}
@@ -287,23 +299,38 @@ export default function ChatScreen() {
               ) : null}
             </View>
           ) : null}
-          {(query.data ?? []).map((message: ConversationMessage) => {
-            return message.isMine ? (
-              <LinearGradient
-                key={message.id}
-                colors={gradients.brand}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.bubble, styles.bubbleMine]}
-              >
+          {(query.data ?? []).map((message: ConversationMessage, index, messages) => {
+            const previous = messages[index - 1];
+            const showDay = !previous || new Date(previous.createdAt).toDateString() !== new Date(message.createdAt).toDateString();
+            const bubble = message.isMine ? (
+              <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.bubble, styles.bubbleMine]}>
                 <Text style={styles.bubbleMineText}>{message.content}</Text>
               </LinearGradient>
             ) : (
-              <View key={message.id} style={[styles.bubble, styles.bubbleTheirs]}>
-                <Text style={styles.bubbleTheirsText}>{message.content}</Text>
+              <View style={[styles.bubble, styles.bubbleTheirs]}><Text style={styles.bubbleTheirsText}>{message.content}</Text></View>
+            );
+            return (
+              <View key={message.id}>
+                {showDay ? <View style={styles.dayRow}><View style={styles.dayLine} /><Text style={styles.dayText}>{dayLabel(message.createdAt)}</Text><View style={styles.dayLine} /></View> : null}
+                <View style={message.isMine ? styles.messageMine : styles.messageTheirs}>
+                  {bubble}
+                  <Text style={styles.messageMeta}>{clockTime(message.createdAt)}{message.isMine ? ` · ${message.isRead ? 'Đã xem' : 'Đã gửi'}` : ''}</Text>
+                </View>
               </View>
             );
           })}
+          {mutation.isPending && pendingSendRef.current ? (
+            <View style={styles.messageMine}>
+              <View style={[styles.bubble, styles.pendingBubble]}><Text style={styles.bubbleMineText}>{pendingSendRef.current.content}</Text></View>
+              <Text style={styles.messageMeta}>Đang gửi…</Text>
+            </View>
+          ) : null}
+          {mutation.isError && pendingSendRef.current ? (
+            <View style={styles.sendError}>
+              <Text style={styles.sendErrorText}>{mutation.error instanceof Error ? mutation.error.message : 'Chưa gửi được tin nhắn.'}</Text>
+              <Pressable onPress={() => pendingSendRef.current && mutation.mutate(pendingSendRef.current)}><Text style={styles.retryText}>Thử gửi lại</Text></Pressable>
+            </View>
+          ) : null}
         </ScrollView>
       )}
 
@@ -347,7 +374,7 @@ export default function ChatScreen() {
                 </Pressable>
               ))}
               <Pressable accessibilityRole="button" onPress={requestWingman} style={({ pressed }) => [styles.wingmanRefresh, pressed && styles.pressed]}>
-                <Text style={styles.wingmanRefreshText}>Tạo ba gợi ý khác</Text>
+                <RefreshCw color={colors.primaryText} size={13} /><Text style={styles.wingmanRefreshText}>Tạo ba gợi ý khác</Text>
               </Pressable>
             </View>
           ) : (
@@ -371,10 +398,24 @@ export default function ChatScreen() {
         />
         <Pressable onPress={submit} disabled={!content.trim() || mutation.isPending} style={styles.sendShadow}>
           <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sendBtn}>
-            <Text style={styles.sendText}>➤</Text>
+            <Send color={colors.onPrimary} size={18} />
           </LinearGradient>
         </Pressable>
       </View>
+
+      <Modal animationType="fade" onRequestClose={() => setPendingSuggestion(null)} transparent visible={pendingSuggestion != null}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIcon}><Sparkles color={colors.primaryStrong} size={22} /></View>
+            <Text style={styles.modalTitle}>Thay nội dung đang soạn?</Text>
+            <Text style={styles.modalBody}>Wingman chỉ điền gợi ý vào composer và sẽ không tự gửi tin nhắn.</Text>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setPendingSuggestion(null)} style={[styles.modalButton, styles.modalCancel]}><Text style={styles.modalCancelText}>Giữ bản nháp</Text></Pressable>
+              <Pressable onPress={() => { if (pendingSuggestion) setContent(pendingSuggestion); setPendingSuggestion(null); }} style={[styles.modalButton, styles.modalConfirm]}><Text style={styles.modalConfirmText}>Dùng gợi ý</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -391,10 +432,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  back: { fontSize: 30, color: colors.primaryStrong, lineHeight: 30, paddingRight: 4 },
+  backButton: { alignItems: 'center', backgroundColor: colors.background, borderRadius: 15, height: 38, justifyContent: 'center', width: 38 },
   headerCopy: { flex: 1 },
-  headerName: { fontWeight: '700', fontSize: 15, color: colors.text },
-  headerStatus: { fontSize: 11.5, color: colors.online, fontWeight: '600', marginTop: 1 },
+  headerName: { fontWeight: '900', fontSize: 15, color: colors.text },
+  headerStatusRow: { alignItems: 'center', flexDirection: 'row', gap: 4, marginTop: 2 },
+  headerStatus: { fontSize: 10.5, color: colors.muted, fontWeight: '600' },
   wingmanHeaderButton: {
     alignItems: 'center',
     backgroundColor: colors.surfaceTint,
@@ -409,7 +451,7 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: colors.muted, fontSize: 14, marginBottom: 10 },
   retryText: { color: colors.primaryStrong, fontSize: 14, fontWeight: '800' },
-  messages: { padding: 18, gap: 10 },
+  messages: { padding: 18, paddingBottom: 26 },
   revealCard: {
     alignItems: 'center',
     backgroundColor: colors.noteBg,
@@ -436,9 +478,18 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 5,
   },
   bubbleTheirsText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  dayRow: { alignItems: 'center', flexDirection: 'row', gap: 9, marginVertical: 15 },
+  dayLine: { backgroundColor: colors.border, flex: 1, height: 1 },
+  dayText: { color: colors.muted, fontSize: 9.5, fontWeight: '700' },
+  messageMine: { alignItems: 'flex-end', marginBottom: 9 },
+  messageTheirs: { alignItems: 'flex-start', marginBottom: 9 },
+  messageMeta: { color: colors.mutedLight, fontSize: 9.5, marginHorizontal: 4, marginTop: 4 },
+  pendingBubble: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderBottomRightRadius: 5, borderRadius: 18, opacity: 0.7 },
+  sendError: { alignItems: 'flex-end', gap: 3, marginBottom: 8 },
+  sendErrorText: { color: '#A7442E', fontSize: 10.5 },
 
   wingmanPanel: {
-    backgroundColor: colors.surfaceWarm,
+    backgroundColor: '#FFF8EF',
     borderColor: colors.noteBorder,
     borderTopWidth: 1,
     gap: 10,
@@ -447,22 +498,25 @@ const styles = StyleSheet.create({
   },
   wingmanPanelHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   wingmanTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  wingmanTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
-  wingmanPrivate: { color: colors.primaryText, fontSize: 11.5, fontWeight: '700' },
+  wingmanTitle: { color: colors.text, fontSize: 14, fontWeight: '900' },
+  wingmanPrivate: { backgroundColor: colors.surfaceTint, borderRadius: radii.pill, color: colors.primaryText, fontSize: 9.5, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4 },
   wingmanBody: { color: colors.textSoft, flex: 1, fontSize: 12.5, lineHeight: 18 },
   wingmanLoading: { alignItems: 'center', flexDirection: 'row', gap: 9 },
   wingmanError: { gap: 7 },
   wingmanSuggestionList: { gap: 7 },
   wingmanSuggestion: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    borderColor: colors.noteBorder,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    shadowColor: '#B87843',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
   },
-  wingmanSuggestionText: { color: colors.text, fontSize: 13, lineHeight: 18 },
-  wingmanRefresh: { alignSelf: 'flex-start', paddingVertical: 3 },
+  wingmanSuggestionText: { color: colors.text, fontSize: 12.5, lineHeight: 18 },
+  wingmanRefresh: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: 6, paddingVertical: 3 },
   wingmanRefreshText: { color: colors.primaryText, fontSize: 12.5, fontWeight: '800' },
   wingmanPrimaryButton: {
     alignItems: 'center',
@@ -505,5 +559,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  sendText: { color: colors.onPrimary, fontSize: 18 },
+  modalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(43,33,26,0.48)', flex: 1, justifyContent: 'center', padding: 22 },
+  modalCard: { backgroundColor: colors.surface, borderRadius: 25, gap: 10, maxWidth: 390, padding: 22, width: '100%' },
+  modalIcon: { alignItems: 'center', backgroundColor: colors.surfaceTint, borderRadius: 20, height: 46, justifyContent: 'center', marginBottom: 3, width: 46 },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },
+  modalBody: { color: colors.textSoft, fontSize: 12.5, lineHeight: 19 },
+  modalActions: { flexDirection: 'row', gap: 9, marginTop: 8 },
+  modalButton: { alignItems: 'center', borderRadius: 14, flex: 1, justifyContent: 'center', minHeight: 45, paddingHorizontal: 10 },
+  modalCancel: { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 },
+  modalConfirm: { backgroundColor: colors.primaryStrong },
+  modalCancelText: { color: colors.textSoft, fontSize: 11.5, fontWeight: '800' },
+  modalConfirmText: { color: colors.onPrimary, fontSize: 11.5, fontWeight: '900' },
 });

@@ -42,6 +42,10 @@ max_frequency = "60s"
 [storage]
 enabled = true
 
+# Vector buckets require a paid Supabase tier and are not used by F-Love.
+[storage.vector]
+enabled = false
+
 [functions.generate-daily-matches]
 verify_jwt = true
 

@@ -400,6 +400,281 @@ export interface ConversationReadResult {
   applied: boolean;
 }
 
+export type CourseEnrollmentStatus = 'enrolled' | 'in_progress' | 'completed';
+
+export interface LearningCourseSummary {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  durationMinutes: number;
+  lessonCount: number;
+  isFree: boolean;
+  enrollmentStatus: CourseEnrollmentStatus | null;
+  progressPercent: number;
+  currentLesson: number;
+  enrolledAt: string | null;
+  completedAt: string | null;
+}
+
+export interface LearningCourseEnrollment {
+  status: CourseEnrollmentStatus;
+  progressPercent: number;
+  currentLesson: number;
+  enrolledAt: string;
+  completedAt: string | null;
+}
+
+export interface LearningContentBlock {
+  kind: string;
+  title: string;
+  body?: string;
+  items?: string[];
+}
+
+export interface LearningLesson {
+  id: string;
+  position: number;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  durationMinutes: number;
+  contentBlocks: LearningContentBlock[];
+  quiz: { question: string; options: string[]; explanation: string };
+  progress: null | {
+    selectedAnswer: number;
+    isCorrect: boolean;
+    reflection: string;
+    completedAt: string;
+  };
+}
+
+export interface LearningCourse extends Omit<LearningCourseSummary, 'enrollmentStatus' | 'progressPercent' | 'currentLesson' | 'enrolledAt' | 'completedAt'> {
+  contentVersion: number;
+  sourceLinks: Array<{ label: string; url: string }>;
+  enrollment: LearningCourseEnrollment | null;
+  lessons: LearningLesson[];
+}
+
+export interface CourseEnrollmentResult {
+  courseId: string;
+  status: CourseEnrollmentStatus;
+  progressPercent: number;
+  currentLesson: number;
+  enrolledAt: string;
+  applied: boolean;
+}
+
+export interface LessonCompletionResult {
+  courseId: string;
+  lessonId: string;
+  status: CourseEnrollmentStatus;
+  progressPercent: number;
+  currentLesson: number;
+  isCorrect: boolean;
+  completedAt: string;
+}
+
+export interface ConversationSummary {
+  conversationId: string;
+  partnerName: string;
+  partnerAvatarUrl: string;
+  isAnonymous: boolean;
+  lastMessageContent: string;
+  lastMessageCreatedAt: string | null;
+  lastMessageIsMine: boolean;
+  unreadCount: number;
+  updatedAt: string;
+}
+
+function enrollmentStatus(value: unknown, nullable = false): CourseEnrollmentStatus | null {
+  if (nullable && value == null) return null;
+  if (value === 'enrolled' || value === 'in_progress' || value === 'completed') return value;
+  throw new Error('Invalid learning enrollment status.');
+}
+
+function nonNegativeInteger(value: unknown, message: string): number {
+  const number = finiteNumber(value, message);
+  if (!Number.isInteger(number) || number < 0) throw new Error(message);
+  return number;
+}
+
+function nullableIsoString(value: unknown, message: string): string | null {
+  if (value == null) return null;
+  return dateField(value, message).toISOString();
+}
+
+function learningBlockFromPayload(value: unknown): LearningContentBlock {
+  const block = record(value, 'Invalid learning content block.');
+  return {
+    kind: stringField(block.kind, 'Invalid learning block kind.'),
+    title: stringField(block.title, 'Invalid learning block title.'),
+    ...(block.body == null ? {} : { body: textField(block.body, 'Invalid learning block body.') }),
+    ...(block.items == null ? {} : { items: stringArray(block.items, 'Invalid learning block items.') }),
+  };
+}
+
+export function learningCourseFromPayload(value: unknown): LearningCourse {
+  const course = record(value, 'Invalid learning course.');
+  if (!Array.isArray(course.lessons) || !Array.isArray(course.sourceLinks)) {
+    throw new Error('Invalid learning course collections.');
+  }
+  const enrollmentValue = course.enrollment == null
+    ? null
+    : record(course.enrollment, 'Invalid learning enrollment.');
+  const enrollment: LearningCourseEnrollment | null = enrollmentValue == null ? null : {
+    status: enrollmentStatus(enrollmentValue.status) as CourseEnrollmentStatus,
+    progressPercent: nonNegativeInteger(enrollmentValue.progressPercent, 'Invalid learning progress.'),
+    currentLesson: nonNegativeInteger(enrollmentValue.currentLesson, 'Invalid current lesson.'),
+    enrolledAt: dateField(enrollmentValue.enrolledAt, 'Invalid enrollment timestamp.').toISOString(),
+    completedAt: nullableIsoString(enrollmentValue.completedAt, 'Invalid course completion timestamp.'),
+  };
+  return {
+    id: stringField(course.id, 'Invalid learning course id.'),
+    slug: stringField(course.slug, 'Invalid learning course slug.'),
+    title: stringField(course.title, 'Invalid learning course title.'),
+    subtitle: textField(course.subtitle, 'Invalid learning course subtitle.'),
+    description: textField(course.description, 'Invalid learning course description.'),
+    durationMinutes: nonNegativeInteger(course.durationMinutes, 'Invalid course duration.'),
+    lessonCount: nonNegativeInteger(course.lessonCount, 'Invalid course lesson count.'),
+    isFree: course.isFree === true,
+    contentVersion: nonNegativeInteger(course.contentVersion, 'Invalid course content version.'),
+    sourceLinks: course.sourceLinks.map(item => {
+      const link = record(item, 'Invalid course source link.');
+      return {
+        label: stringField(link.label, 'Invalid course source label.'),
+        url: stringField(link.url, 'Invalid course source URL.'),
+      };
+    }),
+    enrollment,
+    lessons: course.lessons.map(item => {
+      const lesson = record(item, 'Invalid learning lesson.');
+      const quiz = record(lesson.quiz, 'Invalid learning quiz.');
+      const progressValue = lesson.progress == null
+        ? null
+        : record(lesson.progress, 'Invalid lesson progress.');
+      return {
+        id: stringField(lesson.id, 'Invalid learning lesson id.'),
+        position: nonNegativeInteger(lesson.position, 'Invalid lesson position.'),
+        eyebrow: textField(lesson.eyebrow, 'Invalid lesson eyebrow.'),
+        title: stringField(lesson.title, 'Invalid lesson title.'),
+        summary: textField(lesson.summary, 'Invalid lesson summary.'),
+        durationMinutes: nonNegativeInteger(lesson.durationMinutes, 'Invalid lesson duration.'),
+        contentBlocks: Array.isArray(lesson.contentBlocks)
+          ? lesson.contentBlocks.map(learningBlockFromPayload)
+          : (() => { throw new Error('Invalid learning content blocks.'); })(),
+        quiz: {
+          question: stringField(quiz.question, 'Invalid learning quiz question.'),
+          options: stringArray(quiz.options, 'Invalid learning quiz options.'),
+          explanation: textField(quiz.explanation, 'Invalid learning quiz explanation.'),
+        },
+        progress: progressValue == null ? null : {
+          selectedAnswer: nonNegativeInteger(progressValue.selectedAnswer, 'Invalid selected answer.'),
+          isCorrect: progressValue.isCorrect === true,
+          reflection: textField(progressValue.reflection, 'Invalid learning reflection.'),
+          completedAt: dateField(progressValue.completedAt, 'Invalid lesson completion timestamp.').toISOString(),
+        },
+      };
+    }),
+  };
+}
+
+export async function listLearningCourses(client: FloveSupabaseClient): Promise<LearningCourseSummary[]> {
+  const { data, error } = await client.rpc('list_learning_courses');
+  if (error) throw new Error('Chưa tải được khóa học.');
+  return (data ?? []).map(row => ({
+    id: row.course_id,
+    slug: row.slug,
+    title: row.title,
+    subtitle: row.subtitle,
+    description: row.description,
+    durationMinutes: row.duration_minutes,
+    lessonCount: row.lesson_count,
+    isFree: row.is_free,
+    enrollmentStatus: enrollmentStatus(row.enrollment_status, true),
+    progressPercent: row.progress_percent,
+    currentLesson: row.current_lesson,
+    enrolledAt: row.enrolled_at,
+    completedAt: row.completed_at,
+  }));
+}
+
+export async function getLearningCourse(client: FloveSupabaseClient, slug: string): Promise<LearningCourse> {
+  const { data, error } = await client.rpc('get_learning_course', { p_slug: slug });
+  if (error) throw new Error('Chưa tải được nội dung khóa học.');
+  return learningCourseFromPayload(data);
+}
+
+export async function enrollFreeLearningCourse(
+  client: FloveSupabaseClient,
+  courseId: string,
+  clientRequestId: string,
+): Promise<CourseEnrollmentResult> {
+  const { data, error } = await client.rpc('enroll_free_learning_course', {
+    p_course_id: courseId,
+    p_client_request_id: clientRequestId,
+  });
+  if (error) throw new Error('Chưa đăng ký được khóa học miễn phí.');
+  const row = data?.[0];
+  if (!row) throw new Error('Invalid course enrollment response.');
+  return {
+    courseId: row.course_id,
+    status: enrollmentStatus(row.enrollment_status) as CourseEnrollmentStatus,
+    progressPercent: row.progress_percent,
+    currentLesson: row.current_lesson,
+    enrolledAt: row.enrolled_at,
+    applied: row.applied,
+  };
+}
+
+export async function completeLearningLesson(
+  client: FloveSupabaseClient,
+  input: { courseId: string; lessonId: string; selectedAnswer: number; reflection?: string },
+): Promise<LessonCompletionResult> {
+  const { data, error } = await client.rpc('complete_learning_lesson', {
+    p_course_id: input.courseId,
+    p_lesson_id: input.lessonId,
+    p_selected_answer: input.selectedAnswer,
+    p_reflection: input.reflection ?? '',
+  });
+  if (error) throw new Error('Chưa lưu được tiến độ bài học.');
+  const row = data?.[0];
+  if (!row) throw new Error('Invalid lesson completion response.');
+  return {
+    courseId: row.course_id,
+    lessonId: row.lesson_id,
+    status: enrollmentStatus(row.enrollment_status) as CourseEnrollmentStatus,
+    progressPercent: row.progress_percent,
+    currentLesson: row.current_lesson,
+    isCorrect: row.is_correct,
+    completedAt: row.completed_at,
+  };
+}
+
+export async function listConversationSummaries(
+  client: FloveSupabaseClient,
+  conversationId?: string,
+  limit = 50,
+): Promise<ConversationSummary[]> {
+  const { data, error } = await client.rpc('list_conversation_summaries', {
+    ...(conversationId ? { p_conversation_id: conversationId } : {}),
+    p_limit: limit,
+  });
+  if (error) throw new Error('Chưa tải được danh sách trò chuyện.');
+  return (data ?? []).map(row => ({
+    conversationId: row.conversation_id,
+    partnerName: row.partner_name,
+    partnerAvatarUrl: row.partner_avatar_url,
+    isAnonymous: row.is_anonymous,
+    lastMessageContent: row.last_message_content,
+    lastMessageCreatedAt: row.last_message_created_at,
+    lastMessageIsMine: row.last_message_is_mine,
+    unreadCount: row.unread_count,
+    updatedAt: row.updated_at,
+  }));
+}
+
 function blindDateSessionFromRow(row: {
   session_id: string;
   conversation_id: string;
@@ -517,6 +792,32 @@ export async function listConversationMessages(
     isRead: row.is_read,
     isMine: row.is_mine,
   }));
+}
+
+/** The only shared-message write path used by full chat and the compact widget. */
+export async function sendConversationMessage(
+  client: FloveSupabaseClient,
+  input: {
+    conversationId: string;
+    content: string;
+    clientMessageId: string;
+    expectedUserId: string;
+  },
+): Promise<{ messageId: string; createdAt: string; applied: boolean }> {
+  const { data, error } = await client.rpc('send_message_atomic', {
+    p_conversation_id: input.conversationId,
+    p_content: input.content,
+    p_client_message_id: input.clientMessageId,
+    p_expected_user_id: input.expectedUserId,
+  });
+  if (error) throw new Error('Chưa gửi được tin nhắn.');
+  const row = data?.[0];
+  if (!row) throw new Error('Invalid message send response.');
+  return {
+    messageId: row.message_id,
+    createdAt: row.created_at,
+    applied: row.applied,
+  };
 }
 
 /** Atomically clears the caller's badge and marks counterpart messages read. */

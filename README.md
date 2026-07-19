@@ -9,7 +9,8 @@ F-Love is an AI-curated dating app for students. Instead of swipe-based discover
 | AI Picks | Up to five curated recommendations with one overall compatibility index, its backend label, and data-backed reasons |
 | F-Love AI Coach | Private Vietnamese preference coaching that maintains preferred and avoided soft traits |
 | Messages + Wingman | Direct chat after mutual accept, with three private draft suggestions that never auto-send |
-| Blind Date | Optional anonymous chat flow kept separate from AI Picks |
+| Yêu lành mạnh 101 | Free native micro-course on relationship signals, boundaries, communication, and online safety |
+| Chat widget | Authenticated quick inbox and composer synchronized with the full Messages experience |
 | Profile | Verified-email student profile, bio, campus, major, interests, and avatar |
 
 ## Tech Stack
@@ -51,8 +52,8 @@ npm run build:packages
 The backend contract lives in `supabase/`:
 
 - `supabase/migrations`: Postgres schema, RLS, storage policies, and RPC transactions.
-- `supabase/functions`: Edge Functions for AI Picks, feedback, mutual accept, AI Coach, private Wingman, Blind Date, and reveal.
-- `supabase/seed.sql`: optional seed users/profiles for non-production environments.
+- `supabase/functions`: Edge Functions for AI Picks, feedback, mutual accept, AI Coach, private Wingman, and legacy Blind Date/reveal compatibility.
+- `supabase/seed.sql`: optional local users, profiles, official matches, conversations, and realistic messages.
 - `supabase/tests`: database contract tests when the Supabase CLI test runner is available.
 
 Cloud-first setup:
@@ -101,7 +102,9 @@ Pushes to `main` on `kain205/flove` auto-deploy; `npx vercel deploy --prod` depl
 
 ## Seed Data
 
-AI Picks generates candidates through a service-only filtered RPC. Optional seed profiles are defined in:
+AI Picks generates candidates through a service-only filtered RPC. The optional local seed includes five
+confirmed users plus two official conversations with realistic messages, unread state, and deterministic
+login password `password123`. It is never deployed by the production migration flow.
 
 ```bash
 supabase/seed.sql

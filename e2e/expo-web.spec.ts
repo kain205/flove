@@ -137,6 +137,32 @@ function openDailyResult() {
   };
 }
 
+function learningCoursePayload(enrolled: boolean) {
+  return {
+    id: 'healthy-love-101-v1',
+    slug: 'yeu-lanh-manh-101',
+    title: 'Yêu lành mạnh 101',
+    subtitle: 'Hiểu mình, tôn trọng nhau và trò chuyện an toàn hơn.',
+    description: 'Bốn bài học ngắn.',
+    durationMinutes: 24,
+    lessonCount: 1,
+    isFree: true,
+    contentVersion: 1,
+    sourceLinks: [{ label: 'Nguồn chính thức', url: 'https://example.test/course' }],
+    enrollment: enrolled ? {
+      status: 'enrolled', progressPercent: 0, currentLesson: 1,
+      enrolledAt: '2026-07-19T00:03:00Z', completedAt: null,
+    } : null,
+    lessons: [{
+      id: 'healthy-love-101-signals', position: 1, eyebrow: 'BÀI 1 · NHẬN DIỆN',
+      title: 'Một mối quan hệ tốt trông như thế nào?', summary: 'Phân biệt quan tâm và kiểm soát.', durationMinutes: 6,
+      contentBlocks: [{ kind: 'lead', title: 'Bình yên không có nghĩa là nhàm chán', body: 'Bạn có thể là chính mình.' }],
+      quiz: { question: 'Hành vi nào thể hiện sự tôn trọng?', options: ['Kiểm tra mật khẩu', 'Chấp nhận thời gian riêng'], explanation: 'Tôn trọng ranh giới.' },
+      progress: null,
+    }],
+  };
+}
+
 async function installAuthenticatedMocks(page: Page, options: {
   age?: number;
   dailyResult?: object;
@@ -162,7 +188,9 @@ async function installAuthenticatedMocks(page: Page, options: {
 
   let sharedMessageWrites = 0;
   let unlockCalls = 0;
+  let courseEnrollCalls = 0;
   let unlocked = false;
+  let courseEnrolled = false;
   const coachRequests: object[] = [];
   let preferenceMessages: object[] = [];
   await page.route(/\/(?:auth|rest|functions)\/v1\//, async route => {
@@ -196,6 +224,37 @@ async function installAuthenticatedMocks(page: Page, options: {
       });
       return;
     }
+    if (path.endsWith('/rpc/list_conversation_summaries')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        conversation_id: 'conversation-e2e', partner_name: 'Mai', partner_avatar_url: '', is_anonymous: false,
+        last_message_content: 'Chào, rất vui được làm quen.', last_message_created_at: '2026-07-19T00:01:00Z',
+        last_message_is_mine: true, unread_count: 1, updated_at: '2026-07-19T00:01:00Z',
+      }]) });
+      return;
+    }
+    if (path.endsWith('/rpc/list_learning_courses')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        course_id: 'healthy-love-101-v1', slug: 'yeu-lanh-manh-101', title: 'Yêu lành mạnh 101',
+        subtitle: 'Hiểu mình, tôn trọng nhau và trò chuyện an toàn hơn.', description: 'Bốn bài học ngắn.',
+        duration_minutes: 24, lesson_count: 4, is_free: true,
+        enrollment_status: courseEnrolled ? 'enrolled' : null, progress_percent: 0, current_lesson: 1,
+        enrolled_at: courseEnrolled ? '2026-07-19T00:03:00Z' : null, completed_at: null,
+      }]) });
+      return;
+    }
+    if (path.endsWith('/rpc/get_learning_course')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(learningCoursePayload(courseEnrolled)) });
+      return;
+    }
+    if (path.endsWith('/rpc/enroll_free_learning_course')) {
+      courseEnrollCalls += 1;
+      courseEnrolled = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        course_id: 'healthy-love-101-v1', enrollment_status: 'enrolled', progress_percent: 0,
+        current_lesson: 1, enrolled_at: '2026-07-19T00:03:00Z', applied: courseEnrollCalls === 1,
+      }]) });
+      return;
+    }
     if (path.endsWith('/rpc/list_conversation_messages')) {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
         { id: 'message-1', conversation_id: 'conversation-e2e', content: 'Chào bạn!', created_at: '2026-07-19T00:00:00Z', is_read: true, is_mine: false },
@@ -215,7 +274,9 @@ async function installAuthenticatedMocks(page: Page, options: {
     }
     if (path.endsWith('/rpc/send_message_atomic')) {
       sharedMessageWrites += 1;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        message_id: 'message-sent-e2e', created_at: '2026-07-19T00:04:00Z', applied: true,
+      }]) });
       return;
     }
     if (path.endsWith('/rpc/unlock_daily_match_batch')) {
@@ -282,6 +343,7 @@ async function installAuthenticatedMocks(page: Page, options: {
   await page.reload();
   return {
     sharedMessageWrites: () => sharedMessageWrites,
+    courseEnrollCalls: () => courseEnrollCalls,
     unlockCalls: () => unlockCalls,
     coachRequests: () => coachRequests,
   };
@@ -398,6 +460,19 @@ test('AI Coach finalizes a preference turn and refreshes the private transcript'
   expect(mocks.coachRequests()[0]).toMatchObject({ content: message, expectedUserId: E2E_USER_ID });
 });
 
+test('relationship course replaces Blind Date and creates one real free enrollment', async ({ page }) => {
+  const mocks = await installAuthenticatedMocks(page, { dailyResult: openDailyResult() });
+  await page.goto('/');
+
+  await expect(page.getByRole('tab', { name: 'Blind Date' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Khóa học' }).click();
+  await expect(page.getByText('Yêu lành mạnh 101', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Đăng ký miễn phí' }).click();
+  await expect(page).toHaveURL(/\/course\/yeu-lanh-manh-101/);
+  await expect(page.getByText('Một mối quan hệ tốt trông như thế nào?', { exact: true }).first()).toBeVisible();
+  expect(mocks.courseEnrollCalls()).toBe(1);
+});
+
 test('Wingman suggestions fill the composer without writing a shared message', async ({ page }) => {
   const mocks = await installAuthenticatedMocks(page, {
     dailyResult: openDailyResult(),
@@ -405,7 +480,7 @@ test('Wingman suggestions fill the composer without writing a shared message', a
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Tin nhắn' }).click();
-  await page.getByText('Cuộc trò chuyện conversa', { exact: true }).click();
+  await page.getByText('Mai', { exact: true }).click();
   await expect(page).toHaveURL(/\/chat\/conversation-e2e\/?$/);
   await page.getByLabel('Mở Wingman').click();
 
@@ -416,4 +491,17 @@ test('Wingman suggestions fill the composer without writing a shared message', a
   await expect(page.getByRole('textbox', { name: 'Nhắn tin...' })).toHaveValue(suggestion);
   expect(mocks.sharedMessageWrites()).toBe(0);
   await expect(page.getByText('Chào bạn!', { exact: true })).toBeVisible();
+});
+
+test('chat widget uses the shared atomic send path and stays synchronized with inbox data', async ({ page }) => {
+  const mocks = await installAuthenticatedMocks(page, { dailyResult: openDailyResult() });
+  await page.goto('/');
+
+  await page.getByLabel('Mở chat nhanh').click();
+  await expect(page.getByText('Tin nhắn gần đây', { exact: true })).toBeVisible();
+  await page.getByText('Mai', { exact: true }).click();
+  await page.getByLabel('Nhắn tin nhanh').fill('Hẹn bạn một buổi cà phê nhé?');
+  await page.getByLabel('Gửi tin nhắn nhanh').click();
+  await expect(page.getByLabel('Nhắn tin nhanh')).toHaveValue('');
+  expect(mocks.sharedMessageWrites()).toBe(1);
 });
