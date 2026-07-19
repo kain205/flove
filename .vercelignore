@@ -1,0 +1,6 @@
+*-handoff.zip
+*.dc.html
+.design-handoff
+e2e
+test-results
+playwright-report

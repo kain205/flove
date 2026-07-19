@@ -352,28 +352,42 @@ Rollout order:
 Operational targets/alerts are: cached batch p95 <1s, uncached deterministic generation p95 <3s,
 generation failures >2%, `generating` >2 minutes, or embedding pending/processing >10 minutes.
 
-Configure Supabase Auth redirect URLs in the Supabase Dashboard:
+Supabase Auth redirect URLs (source of truth: `supabase/config.toml` `additional_redirect_urls`;
+currently applied to the cloud project):
 
 ```text
 flove://auth/callback
 flove://auth/reset-password
-https://your-vercel-domain/auth/callback
-https://your-vercel-domain/auth/reset-password
+https://flove.app/auth/callback
+https://flove.app/auth/reset-password
+https://flove-app.vercel.app/auth/callback
+https://flove-app.vercel.app/auth/reset-password
+https://f-connect-rho.vercel.app/auth/callback
+https://f-connect-rho.vercel.app/auth/reset-password
 ```
+
+Note: `supabase config push` with CLI 2.107 currently fails on the Storage config schema and can
+clobber dashboard-tuned auth values that are unset in the toml (e.g. `otp_length`); those values are
+now pinned in `config.toml` (`otp_length = 8`, `max_frequency = "60s"`). Prefer updating single auth
+fields via the Management API until the CLI is upgraded.
 
 Set Edge Function secrets in Supabase Cloud. Do not commit them.
 
 ### Vercel
 
-Vercel deploys the Expo Web build from `apps/app`.
-
-Vercel project settings:
+Vercel project `flove` (team `kain205s-projects`, renamed from `f-connect`) deploys the Expo Web
+build. The project root is the repository root; the root `vercel.json` is the live config:
 
 ```text
-Root Directory: apps/app
-Build Command: npm run build:web
-Output Directory: dist
+Install Command: npm install
+Build Command: npm run build:app:web
+Output Directory: apps/app/dist
+Production domains: flove-app.vercel.app (primary), f-connect-rho.vercel.app (legacy alias)
 ```
+
+The root `vercel.json` also rewrites all routes to `/index.html` so Expo Router deep links do not
+404. Deploys run from the GitHub repo `kain205/flove` (renamed from `F-connect`; pushes to `main`
+auto-deploy) or manually with `npx vercel deploy --prod`.
 
 Vercel environment variables:
 
@@ -381,8 +395,6 @@ Vercel environment variables:
 EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY
 ```
-
-`apps/app/vercel.json` rewrites all routes to `/` so Expo Router deep links do not 404.
 
 ## Local Development
 

@@ -21,7 +21,11 @@ additional_redirect_urls = [
   "flove://auth/callback",
   "flove://auth/reset-password",
   "https://flove.app/auth/callback",
-  "https://flove.app/auth/reset-password"
+  "https://flove.app/auth/reset-password",
+  "https://flove-app.vercel.app/auth/callback",
+  "https://flove-app.vercel.app/auth/reset-password",
+  "https://f-connect-rho.vercel.app/auth/callback",
+  "https://f-connect-rho.vercel.app/auth/reset-password"
 ]
 
 [auth.hook.before_user_created]
@@ -32,6 +36,8 @@ uri = "pg-functions://postgres/public/before_user_created_require_fpt"
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
+otp_length = 8
+max_frequency = "60s"
 
 [storage]
 enabled = true

@@ -88,16 +88,11 @@ Configure Supabase Auth redirect URLs in the Dashboard:
 
 ## Vercel
 
-Deploy the Expo Web output from `apps/app`.
+The Vercel project `flove` builds from the repository root using the root `vercel.json`
+(`npm run build:app:web` → `apps/app/dist`) and serves at `https://flove-app.vercel.app`.
+Pushes to `main` on `kain205/flove` auto-deploy; `npx vercel deploy --prod` deploys manually.
 
-Vercel project settings:
-
-- Root Directory: `apps/app`
-- Build Command: `npm run build:web`
-- Output Directory: `dist`
 - Environment Variables: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-
-The app includes `apps/app/vercel.json` so deep links and Expo Router routes rewrite back to `/`.
 
 ## Seed Data
 
